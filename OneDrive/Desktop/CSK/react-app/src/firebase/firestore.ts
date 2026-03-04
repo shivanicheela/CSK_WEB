@@ -11,7 +11,8 @@ import {
   orderBy,
   limit,
   DocumentData,
-  QueryConstraint
+  QueryConstraint,
+  setDoc
 } from 'firebase/firestore';
 import { db } from './config.ts';
 
@@ -664,3 +665,154 @@ export const getWatchedLectures = async (userId: string): Promise<any[]> => {
     throw error;
   }
 };
+
+// ============================================
+// VIDEO MANAGEMENT FUNCTIONS
+// ============================================
+
+export const addVideoToDatabase = async (videoData: {
+  title: string;
+  instructor: string;
+  duration: string;
+  description: string;
+  url: string;
+  courseId: string;
+  uploadedBy: string;
+}) => {
+  try {
+    const videosRef = collection(db, 'videos');
+    const docRef = await addDoc(videosRef, {
+      ...videoData,
+      uploadedAt: new Date().toISOString(),
+      status: 'active'
+    });
+    console.log('✅ Video added to database:', docRef.id);
+    return docRef.id;
+  } catch (error: any) {
+    console.error('❌ Error adding video:', error.message);
+    throw error;
+  }
+};
+
+export const getVideosFromDatabase = async () => {
+  try {
+    const videosRef = collection(db, 'videos');
+    const q = query(videosRef, orderBy('uploadedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    
+    const videos: any[] = [];
+    snapshot.forEach((doc) => {
+      videos.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    console.log('✅ Fetched all videos');
+    return videos;
+  } catch (error: any) {
+    console.error('❌ Error fetching videos:', error.message);
+    throw error;
+  }
+};
+
+export const getVideosByCourse = async (courseId: string) => {
+  try {
+    const videosRef = collection(db, 'videos');
+    const q = query(
+      videosRef,
+      where('courseId', '==', courseId),
+      where('status', '==', 'active'),
+      orderBy('uploadedAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    
+    const videos: any[] = [];
+    snapshot.forEach((doc) => {
+      videos.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    console.log(`✅ Fetched videos for course: ${courseId}`);
+    return videos;
+  } catch (error: any) {
+    console.error('❌ Error fetching videos by course:', error.message);
+    throw error;
+  }
+};
+
+export const deleteVideoFromDatabase = async (videoId: string) => {
+  try {
+    const videoRef = doc(db, 'videos', videoId);
+    await deleteDoc(videoRef);
+    console.log('✅ Video deleted from database');
+  } catch (error: any) {
+    console.error('❌ Error deleting video:', error.message);
+    throw error;
+  }
+};
+
+export const updateVideoInDatabase = async (videoId: string, updateData: any) => {
+  try {
+    const videoRef = doc(db, 'videos', videoId);
+    await updateDoc(videoRef, updateData);
+    console.log('✅ Video updated');
+  } catch (error: any) {
+    console.error('❌ Error updating video:', error.message);
+    throw error;
+  }
+};
+
+// ============================================
+// ADMIN ROLE MANAGEMENT
+// ============================================
+
+/**
+ * Check if user is admin
+ * @param userId - Firebase user ID
+ * @returns true if user is admin, false otherwise
+ */
+export const isUserAdmin = async (userId: string): Promise<boolean> => {
+  try {
+    const userRef = doc(db, 'admins', userId);
+    const userSnap = await getDoc(userRef);
+    return userSnap.exists();
+  } catch (error: any) {
+    console.error('❌ Error checking admin status:', error.message);
+    return false;
+  }
+};
+
+/**
+ * Add user as admin
+ * @param userId - Firebase user ID
+ * @param email - User email
+ */
+export const makeUserAdmin = async (userId: string, email: string) => {
+  try {
+    await setDoc(doc(db, 'admins', userId), {
+      email,
+      createdAt: new Date(),
+      role: 'admin'
+    });
+    console.log('✅ User made admin');
+  } catch (error: any) {
+    console.error('❌ Error making user admin:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Remove admin privileges
+ * @param userId - Firebase user ID
+ */
+export const removeAdminRole = async (userId: string) => {
+  try {
+    await deleteDoc(doc(db, 'admins', userId));
+    console.log('✅ Admin role removed');
+  } catch (error: any) {
+    console.error('❌ Error removing admin:', error.message);
+    throw error;
+  }
+};
+

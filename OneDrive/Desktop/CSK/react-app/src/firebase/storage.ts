@@ -6,9 +6,7 @@ import {
   deleteObject,
 } from 'firebase/storage';
 
-// ============================================
-// UPLOAD VIDEO FILE
-// ============================================
+
 export const uploadVideo = async (
   file: File,
   courseId: string,

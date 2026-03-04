@@ -20,6 +20,8 @@ export default function Dashboard(){
   const { user } = useAuth()
   const navigate = useNavigate()
   const [loggingOut, setLoggingOut] = useState(false)
+  const [selectedVideo, setSelectedVideo] = useState<any>(null)
+  const [videoModalOpen, setVideoModalOpen] = useState(false)
   
   // State for dynamic data
   const [stats, setStats] = useState<Stats | null>(null)
@@ -203,6 +205,16 @@ export default function Dashboard(){
             ✅ Mock Tests
           </button>
         </nav>
+
+        {/* UPLOAD VIDEOS BUTTON - For Admins */}
+        <div className="p-4 border-t border-gray-200">
+          <button 
+            onClick={() => navigate('/upload-video')}
+            className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-lg hover:shadow-lg transition-all transform hover:scale-105"
+          >
+            📹 Upload Videos
+          </button>
+        </div>
 
         {/* LOGOUT BUTTON */}
         <div className="p-4 border-t border-gray-200 mt-auto">
@@ -469,7 +481,15 @@ export default function Dashboard(){
                   <p className="text-sm text-gray-600 mt-2">Comprehensive overview of India's modern history from 1857</p>
                   <div className="mt-4 flex items-center justify-between">
                     <span className="text-xs text-gray-500">👨‍🏫 Dr. Rajesh Kumar</span>
-                    <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold">▶ Watch</button>
+                    <button 
+                      onClick={() => {
+                        setSelectedVideo({ title: 'Modern Indian History Basics', duration: '45 min', instructor: 'Dr. Rajesh Kumar', description: 'Comprehensive overview of India\'s modern history from 1857', url: 'https://test-streams.mux.dev/x36xhzz/x3iu7ql/medium.mp4' })
+                        setVideoModalOpen(true)
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold"
+                    >
+                      ▶ Watch
+                    </button>
                   </div>
                 </div>
 
@@ -484,7 +504,15 @@ export default function Dashboard(){
                   <p className="text-sm text-gray-600 mt-2">Understanding the Constitution and governance structure</p>
                   <div className="mt-4 flex items-center justify-between">
                     <span className="text-xs text-gray-500">👨‍🏫 Prof. Meera Singh</span>
-                    <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold">▶ Watch</button>
+                    <button 
+                      onClick={() => {
+                        setSelectedVideo({ title: 'Constitutional Framework of India', duration: '38 min', instructor: 'Prof. Meera Singh', description: 'Understanding the Constitution and governance structure', url: 'https://www.w3schools.com/html/mov_bbb.mp4' })
+                        setVideoModalOpen(true)
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold"
+                    >
+                      ▶ Watch
+                    </button>
                   </div>
                 </div>
 
@@ -499,7 +527,15 @@ export default function Dashboard(){
                   <p className="text-sm text-gray-600 mt-2">Complete guide to economic concepts and policies</p>
                   <div className="mt-4 flex items-center justify-between">
                     <span className="text-xs text-gray-500">👨‍🏫 Dr. Arun Patel</span>
-                    <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold">▶ Watch</button>
+                    <button 
+                      onClick={() => {
+                        setSelectedVideo({ title: 'Indian Economy Overview', duration: '52 min', instructor: 'Dr. Arun Patel', description: 'Complete guide to economic concepts and policies', url: 'https://www.w3schools.com/html/mov_bbb.mp4' })
+                        setVideoModalOpen(true)
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold"
+                    >
+                      ▶ Watch
+                    </button>
                   </div>
                 </div>
 
@@ -514,7 +550,15 @@ export default function Dashboard(){
                   <p className="text-sm text-gray-600 mt-2">Latest news and events affecting UPSC exam</p>
                   <div className="mt-4 flex items-center justify-between">
                     <span className="text-xs text-gray-500">👨‍🏫 Priya Sharma</span>
-                    <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold">▶ Watch</button>
+                    <button 
+                      onClick={() => {
+                        setSelectedVideo({ title: 'Current Affairs Monthly Special', duration: '41 min', instructor: 'Priya Sharma', description: 'Latest news and events affecting UPSC exam', url: 'https://www.w3schools.com/html/mov_bbb.mp4' })
+                        setVideoModalOpen(true)
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold"
+                    >
+                      ▶ Watch
+                    </button>
                   </div>
                 </div>
               </div>
@@ -566,6 +610,78 @@ export default function Dashboard(){
             )}
           </div>
         )}
+
+        {/* Video Player Modal */}
+        <>
+          {videoModalOpen && selectedVideo && (
+            <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+              <div className="bg-black rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                {/* Close Button */}
+                <div className="flex justify-between items-center p-4 bg-gray-900">
+                  <h3 className="text-white font-black text-lg">{selectedVideo.title}</h3>
+                  <button
+                    onClick={() => setVideoModalOpen(false)}
+                    className="text-white text-2xl hover:text-gray-300 transition-all"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Video Player */}
+                <div className="aspect-video bg-black flex items-center justify-center overflow-hidden">
+                  {selectedVideo.url ? (
+                    <video
+                      key={selectedVideo.url}
+                      controls
+                      autoPlay
+                      className="w-full h-full"
+                      style={{ backgroundColor: '#000' }}
+                      controlsList="nodownload"
+                    >
+                      <source src={selectedVideo.url} type="video/mp4" />
+                      Your browser does not support the video tag.
+                    </video>
+                  ) : (
+                    <div className="text-white text-center">
+                      <p className="text-xl mb-2">📹</p>
+                      <p>Video loading...</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Video Info */}
+                <div className="bg-gray-900 p-6 text-white space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-400">Instructor</p>
+                      <p className="font-bold text-white">{selectedVideo.instructor || 'Dr. Expert'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Duration</p>
+                      <p className="font-bold text-white">{selectedVideo.duration}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Uploaded</p>
+                      <p className="font-bold text-white">Mar 4, 2026</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400 mb-2">Description</p>
+                    <p className="text-gray-300">{selectedVideo.description || 'Comprehensive lecture on this topic'}</p>
+                  </div>
+                  <div className="flex gap-2 pt-4 border-t border-gray-700">
+                    <button className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold transition-all">
+                      ✓ Mark as Watched
+                    </button>
+                    <button className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-bold transition-all">
+                      ⬇️ Download
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       </main>
     </div>
   )

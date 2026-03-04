@@ -2,6 +2,7 @@ import React from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext.tsx'
 import { ProtectedRoute } from './components/ProtectedRoute.tsx'
+import { AdminRoute } from './components/AdminRoute.tsx'
 import Home from './pages/Home'
 import UPSC from './pages/UPSC'
 import TNPSC from './pages/TNPSC'
@@ -13,6 +14,7 @@ import Admin from './pages/Admin'
 import CoursesPage from './pages/Courses.tsx'
 import CourseDetail from './pages/CourseDetail.tsx'
 import AdminCourseUpload from './pages/AdminCourseUpload.tsx'
+import VideoUpload from './pages/VideoUpload.tsx'
 
 export default function App(){
   const location = useLocation()
@@ -95,14 +97,15 @@ export default function App(){
           <Route path="/" element={<Home/>} />
           <Route path="/courses" element={<CoursesPage/>} />
           <Route path="/courses/:courseId" element={<CourseDetail/>} />
-          <Route path="/upload-course" element={<ProtectedRoute><AdminCourseUpload/></ProtectedRoute>} />
+          <Route path="/upload-course" element={<AdminRoute><AdminCourseUpload/></AdminRoute>} />
+          <Route path="/upload-video" element={<AdminRoute><VideoUpload/></AdminRoute>} />
           <Route path="/upsc" element={<UPSC/>} />
           <Route path="/tnpsc" element={<TNPSC/>} />
           <Route path="/login" element={<Login/>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard/></ProtectedRoute>} />
           <Route path="/free-lectures" element={<FreeLectures/>} />
           <Route path="/contact" element={<Contact/>} />
-          <Route path="/admin" element={<ProtectedRoute><Admin/></ProtectedRoute>} />
+          <Route path="/admin" element={<AdminRoute><Admin/></AdminRoute>} />
         </Routes>
       </main>
 
