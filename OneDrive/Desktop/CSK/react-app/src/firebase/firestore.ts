@@ -525,3 +525,142 @@ export const getStudentStats = async (userId: string): Promise<any> => {
     throw error;
   }
 };
+
+// ============================================
+// LECTURES COLLECTION FUNCTIONS
+// ============================================
+
+export interface Lecture extends DocumentData {
+  id?: string;
+  title: string;
+  topic: string;
+  videoUrl: string;
+  duration: number;
+  uploadedBy: string;
+  uploadedAt: any;
+  description?: string;
+  thumbnail?: string;
+}
+
+/**
+ * UPLOAD NEW LECTURE
+ */
+export const uploadLecture = async (lecture: Lecture): Promise<string> => {
+  try {
+    const lecturesRef = collection(db, 'lectures');
+    const docRef = await addDoc(lecturesRef, {
+      ...lecture,
+      uploadedAt: new Date(),
+    });
+    console.log('✅ Lecture uploaded:', docRef.id);
+    return docRef.id;
+  } catch (error: any) {
+    console.error('❌ Error uploading lecture:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * GET ALL LECTURES BY TOPIC
+ */
+export const getLecturesByTopic = async (topic: string): Promise<Lecture[]> => {
+  try {
+    const lecturesRef = collection(db, 'lectures');
+    const q = query(lecturesRef, where('topic', '==', topic), orderBy('uploadedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    
+    const lectures: Lecture[] = [];
+    snapshot.forEach((doc) => {
+      lectures.push({
+        id: doc.id,
+        ...doc.data()
+      } as Lecture);
+    });
+    console.log('✅ Fetched lectures for topic:', topic);
+    return lectures;
+  } catch (error: any) {
+    console.error('❌ Error fetching lectures:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * GET ALL LECTURES
+ */
+export const getAllLectures = async (): Promise<Lecture[]> => {
+  try {
+    const lecturesRef = collection(db, 'lectures');
+    const q = query(lecturesRef, orderBy('uploadedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    
+    const lectures: Lecture[] = [];
+    snapshot.forEach((doc) => {
+      lectures.push({
+        id: doc.id,
+        ...doc.data()
+      } as Lecture);
+    });
+    console.log('✅ Fetched all lectures');
+    return lectures;
+  } catch (error: any) {
+    console.error('❌ Error fetching all lectures:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * DELETE LECTURE
+ */
+export const deleteLecture = async (lectureId: string): Promise<void> => {
+  try {
+    const lectureRef = doc(db, 'lectures', lectureId);
+    await deleteDoc(lectureRef);
+    console.log('✅ Lecture deleted:', lectureId);
+  } catch (error: any) {
+    console.error('❌ Error deleting lecture:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * TRACK LECTURE VIEW
+ */
+export const trackLectureView = async (userId: string, lectureId: string, lectureTitle: string): Promise<void> => {
+  try {
+    const viewRef = collection(db, 'lectureViews');
+    await addDoc(viewRef, {
+      userId,
+      lectureId,
+      lectureTitle,
+      viewedAt: new Date(),
+    });
+    console.log('✅ Lecture view tracked');
+  } catch (error: any) {
+    console.error('❌ Error tracking lecture view:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * GET USER'S WATCHED LECTURES
+ */
+export const getWatchedLectures = async (userId: string): Promise<any[]> => {
+  try {
+    const viewRef = collection(db, 'lectureViews');
+    const q = query(viewRef, where('userId', '==', userId), orderBy('viewedAt', 'desc'));
+    const snapshot = await getDocs(q);
+    
+    const lectures: any[] = [];
+    snapshot.forEach((doc) => {
+      lectures.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    console.log('✅ Fetched watched lectures');
+    return lectures;
+  } catch (error: any) {
+    console.error('❌ Error fetching watched lectures:', error.message);
+    throw error;
+  }
+};

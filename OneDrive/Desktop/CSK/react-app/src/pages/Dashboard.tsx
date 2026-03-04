@@ -193,6 +193,9 @@ export default function Dashboard(){
           <button onClick={() => { setActiveTab('videos'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'videos' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
             🎥 Video Lectures
           </button>
+          <button onClick={() => { setActiveTab('lectures'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'lectures' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
+            📹 Recorded Lectures
+          </button>
           <button onClick={() => { setActiveTab('materials'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'materials' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
             📚 Study Materials
           </button>
@@ -435,6 +438,91 @@ export default function Dashboard(){
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'lectures' && (
+          <div>
+            <h2 className="text-3xl font-black text-gray-900 mb-6">📹 Recorded Lectures</h2>
+            <div className="space-y-4">
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border-2 border-indigo-200">
+                <h3 className="font-black text-gray-900 mb-2">📚 Topics Available</h3>
+                <div className="flex flex-wrap gap-2">
+                  {['General Studies', 'Modern History', 'Current Affairs', 'Constitution', 'Economy', 'Science & Tech'].map(topic => (
+                    <button key={topic} className="px-4 py-2 bg-white rounded-full text-sm font-semibold text-indigo-600 border-2 border-indigo-300 hover:bg-indigo-50 transition-all">
+                      {topic}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all">
+                  <div className="aspect-video bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg flex items-center justify-center mb-4">
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">▶️</div>
+                      <p className="text-white text-xs font-bold">45 min</p>
+                    </div>
+                  </div>
+                  <h3 className="font-black text-gray-900">Modern Indian History Basics</h3>
+                  <p className="text-sm text-gray-600 mt-2">Comprehensive overview of India's modern history from 1857</p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-xs text-gray-500">👨‍🏫 Dr. Rajesh Kumar</span>
+                    <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold">▶ Watch</button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all">
+                  <div className="aspect-video bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-lg flex items-center justify-center mb-4">
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">▶️</div>
+                      <p className="text-white text-xs font-bold">38 min</p>
+                    </div>
+                  </div>
+                  <h3 className="font-black text-gray-900">Constitutional Framework of India</h3>
+                  <p className="text-sm text-gray-600 mt-2">Understanding the Constitution and governance structure</p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-xs text-gray-500">👨‍🏫 Prof. Meera Singh</span>
+                    <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold">▶ Watch</button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all">
+                  <div className="aspect-video bg-gradient-to-br from-orange-600 to-orange-800 rounded-lg flex items-center justify-center mb-4">
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">▶️</div>
+                      <p className="text-white text-xs font-bold">52 min</p>
+                    </div>
+                  </div>
+                  <h3 className="font-black text-gray-900">Indian Economy Overview</h3>
+                  <p className="text-sm text-gray-600 mt-2">Complete guide to economic concepts and policies</p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-xs text-gray-500">👨‍🏫 Dr. Arun Patel</span>
+                    <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold">▶ Watch</button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all">
+                  <div className="aspect-video bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center mb-4">
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">▶️</div>
+                      <p className="text-white text-xs font-bold">41 min</p>
+                    </div>
+                  </div>
+                  <h3 className="font-black text-gray-900">Current Affairs Monthly Special</h3>
+                  <p className="text-sm text-gray-600 mt-2">Latest news and events affecting UPSC exam</p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-xs text-gray-500">👨‍🏫 Priya Sharma</span>
+                    <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold">▶ Watch</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
+                <p className="text-gray-700 font-semibold">📹 More lectures coming soon!</p>
+                <p className="text-sm text-gray-600 mt-2">Admin panel allows uploading new lectures daily</p>
+              </div>
             </div>
           </div>
         )}

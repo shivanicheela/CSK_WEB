@@ -66,6 +66,12 @@ export default function Admin(){
               📚 Content
             </button>
             <button 
+              onClick={() => setActiveTab('lectures')}
+              className={`py-4 px-2 font-bold text-sm border-b-4 transition-all ${activeTab === 'lectures' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-700 hover:text-gray-900'}`}
+            >
+              📹 Lectures
+            </button>
+            <button 
               onClick={() => setActiveTab('reports')}
               className={`py-4 px-2 font-bold text-sm border-b-4 transition-all ${activeTab === 'reports' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-700 hover:text-gray-900'}`}
             >
@@ -239,6 +245,108 @@ export default function Admin(){
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Lectures Tab */}
+        {activeTab === 'lectures' && (
+          <div className="space-y-6">
+            {/* Upload Lecture */}
+            <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6">
+              <h3 className="text-2xl font-black text-gray-900 mb-6">📹 Upload New Lecture</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block font-bold text-gray-900 mb-2">Lecture Title</label>
+                  <input type="text" placeholder="e.g., Modern Indian History Basics" className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-indigo-600 outline-none" />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-900 mb-2">Topic</label>
+                  <select className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-indigo-600 outline-none bg-white">
+                    <option>Select Topic</option>
+                    <option>General Studies</option>
+                    <option>Modern History</option>
+                    <option>Current Affairs</option>
+                    <option>Constitution</option>
+                    <option>Economy</option>
+                    <option>Science & Tech</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-900 mb-2">Duration (minutes)</label>
+                  <input type="number" placeholder="45" className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-indigo-600 outline-none" />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-900 mb-2">Instructor Name</label>
+                  <input type="text" placeholder="Dr. Rajesh Kumar" className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-indigo-600 outline-none" />
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="block font-bold text-gray-900 mb-2">Description</label>
+                <textarea placeholder="Brief description of the lecture..." className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-indigo-600 outline-none" rows={3}></textarea>
+              </div>
+
+              <div className="mt-6">
+                <label className="block font-bold text-gray-900 mb-3">Upload Video File</label>
+                <div className="border-2 border-dashed border-indigo-300 rounded-lg p-8 text-center hover:bg-indigo-50 transition-all cursor-pointer bg-indigo-50">
+                  <div className="text-5xl mb-3">📹</div>
+                  <p className="font-bold text-gray-900">Drag video here or click to upload</p>
+                  <p className="text-sm text-gray-600 mt-2">MP4, WebM, or Ogg (Max 2GB)</p>
+                  <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
+                    <div className="bg-indigo-600 h-2 rounded-full transition-all" style={{width: '0%'}}></div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">Upload Progress: 0%</p>
+                  <input type="file" className="hidden" accept="video/*" />
+                </div>
+              </div>
+
+              <button className="w-full mt-6 px-6 py-3 bg-indigo-600 text-white font-black rounded-lg hover:bg-indigo-700 transition-all transform hover:scale-105">
+                ⬆️ Upload & Publish Lecture
+              </button>
+            </div>
+
+            {/* Existing Lectures */}
+            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+              <h3 className="text-xl font-black text-gray-900 mb-6">📚 Published Lectures</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b-2 border-gray-200">
+                      <th className="text-left font-black text-gray-900 p-3">Title</th>
+                      <th className="text-left font-black text-gray-900 p-3">Topic</th>
+                      <th className="text-left font-black text-gray-900 p-3">Instructor</th>
+                      <th className="text-left font-black text-gray-900 p-3">Duration</th>
+                      <th className="text-left font-black text-gray-900 p-3">Views</th>
+                      <th className="text-left font-black text-gray-900 p-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="p-3 font-semibold text-gray-900">Modern Indian History Basics</td>
+                      <td className="p-3 text-gray-600">Modern History</td>
+                      <td className="p-3 text-gray-600">Dr. Rajesh Kumar</td>
+                      <td className="p-3 text-gray-600">45 min</td>
+                      <td className="p-3 text-gray-600">1,245</td>
+                      <td className="p-3 space-x-2">
+                        <button className="px-3 py-1 bg-blue-100 text-blue-700 rounded font-bold text-xs hover:bg-blue-200">Edit</button>
+                        <button className="px-3 py-1 bg-red-100 text-red-700 rounded font-bold text-xs hover:bg-red-200">Delete</button>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="p-3 font-semibold text-gray-900">Constitutional Framework of India</td>
+                      <td className="p-3 text-gray-600">Constitution</td>
+                      <td className="p-3 text-gray-600">Prof. Meera Singh</td>
+                      <td className="p-3 text-gray-600">38 min</td>
+                      <td className="p-3 text-gray-600">892</td>
+                      <td className="p-3 space-x-2">
+                        <button className="px-3 py-1 bg-blue-100 text-blue-700 rounded font-bold text-xs hover:bg-blue-200">Edit</button>
+                        <button className="px-3 py-1 bg-red-100 text-red-700 rounded font-bold text-xs hover:bg-red-200">Delete</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
