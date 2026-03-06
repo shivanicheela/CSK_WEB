@@ -11,7 +11,11 @@ export default function Login(){
   const [loading, setLoading] = useState(false)
   const [showPhoneLogin, setShowPhoneLogin] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState('')
+  const [logoFailed, setLogoFailed] = useState(false)
   const navigate = useNavigate()
+  
+  // CSK Logo as data URL - Professional Bronze Emblem
+  const logoDataUrl = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 320'%3E%3Cdefs%3E%3CradialGradient id='shine' cx='35%25' cy='35%25'%3E%3Cstop offset='0%25' style='stop-color:%23f4d03f;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%23b8860b;stop-opacity:1' /%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='150' cy='150' r='140' fill='%23f5e6d3' stroke='%23b8860b' stroke-width='4'/%3E%3Ccircle cx='150' cy='150' r='130' fill='none' stroke='%23d4af37' stroke-width='2'/%3E%3Cpath d='M 80 100 Q 70 80 90 70 Q 110 60 130 75 L 150 85 L 170 75 Q 190 60 210 70 Q 230 80 220 100' fill='%23b8860b'/%3E%3Ctext x='150' y='155' font-size='52' font-weight='bold' text-anchor='middle' fill='%23b8860b' font-family='Georgia, serif'%3ECSK%3C/text%3E%3Ctext x='150' y='220' font-size='14' text-anchor='middle' fill='%23b8860b' font-family='Georgia, serif' font-weight='bold'%3ECIVIL SERVICES KENDRA%3C/text%3E%3Ctext x='150' y='245' font-size='10' text-anchor='middle' fill='%238b7500' font-family='serif'%3EMISSION: IAS | VISION: INDIA%3C/text%3E%3C/svg%3E"
 
   // ============================================
   // LOGIN HANDLER
@@ -68,8 +72,17 @@ export default function Login(){
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl w-full items-center">
         {/* Left Side - Branding */}
         <div className="hidden md:block">
-          <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-12 text-white shadow-2xl">
-            <div className="text-5xl font-black mb-6">CSK</div>
+          <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-12 text-white shadow-2xl flex flex-col items-center justify-center">
+            {!logoFailed ? (
+              <img 
+                src={logoDataUrl}
+                alt="CSK Logo" 
+                className="w-24 h-24 object-contain mb-4"
+                onError={() => setLogoFailed(true)}
+              />
+            ) : (
+              <div className="text-5xl font-black mb-6">CSK</div>
+            )}
             <h2 className="text-4xl font-black mb-4 leading-tight">Civil Services Kendra</h2>
             <p className="text-lg text-indigo-100 mb-8">Your complete UPSC & TNPSC preparation platform</p>
             

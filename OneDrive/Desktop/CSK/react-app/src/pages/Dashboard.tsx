@@ -2,8 +2,13 @@ import React, {useEffect, useState} from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.tsx'
 import { logout } from '../firebase/auth.ts'
-import { getStudentStats, getVideosWatchedByUser, getMockTestScoresByUser } from '../firebase/firestore.ts'
+import { getStudentStats, getVideosWatchedByUser, getMockTestScoresByUser, isUserAdmin } from '../firebase/firestore.ts'
 import { initProtections } from '../utils/protections'
+import MockTestEngine from '../components/MockTestEngine'
+import FolderView from '../components/FolderView'
+import { logVideoWatch } from '../utils/progressTracker.ts'
+import { initializeSessions, getUpcomingSessions, getLiveSessions, getCompletedSessions, formatSessionDate, formatSessionTime, getTimeUntilSession, getStatusBadgeColor, getStatusEmoji, registerForSession } from '../utils/liveSessionManager.ts'
+import { SAMPLE_MATERIALS, organizeByCategory } from '../utils/resourceManager.ts'
 
 interface Stats {
   totalHoursWatched: number
@@ -17,12 +22,20 @@ interface Stats {
 export default function Dashboard(){
   const [activeTab, setActiveTab] = useState('overview')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [logoFailed, setLogoFailed] = useState(false)
   const { user } = useAuth()
   const navigate = useNavigate()
+  
+  // CSK Logo as data URL - Professional Bronze Emblem
+  const logoDataUrl = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 320'%3E%3Cdefs%3E%3CradialGradient id='shine' cx='35%25' cy='35%25'%3E%3Cstop offset='0%25' style='stop-color:%23f4d03f;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%23b8860b;stop-opacity:1' /%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='150' cy='150' r='140' fill='%23f5e6d3' stroke='%23b8860b' stroke-width='4'/%3E%3Ccircle cx='150' cy='150' r='130' fill='none' stroke='%23d4af37' stroke-width='2'/%3E%3Cpath d='M 80 100 Q 70 80 90 70 Q 110 60 130 75 L 150 85 L 170 75 Q 190 60 210 70 Q 230 80 220 100' fill='%23b8860b'/%3E%3Ctext x='150' y='155' font-size='52' font-weight='bold' text-anchor='middle' fill='%23b8860b' font-family='Georgia, serif'%3ECSK%3C/text%3E%3Ctext x='150' y='220' font-size='14' text-anchor='middle' fill='%23b8860b' font-family='Georgia, serif' font-weight='bold'%3ECIVIL SERVICES KENDRA%3C/text%3E%3Ctext x='150' y='245' font-size='10' text-anchor='middle' fill='%238b7500' font-family='serif'%3EMISSION: IAS | VISION: INDIA%3C/text%3E%3C/svg%3E"
   const [loggingOut, setLoggingOut] = useState(false)
   const [selectedVideo, setSelectedVideo] = useState<any>(null)
   const [videoModalOpen, setVideoModalOpen] = useState(false)
-  
+  const [activeTestId, setActiveTestId] = useState<string | null>(null)
+  const [testResults, setTestResults] = useState<any>(null)
+  const [videoTracked, setVideoTracked] = useState(false)
+  const [checkingUploadAccess, setCheckingUploadAccess] = useState(false)
+
   // State for dynamic data
   const [stats, setStats] = useState<Stats | null>(null)
   const [videosWatched, setVideosWatched] = useState<any[]>([])
@@ -32,8 +45,10 @@ export default function Dashboard(){
   
   useEffect(()=>{
     if (user?.email) {
-      initProtections(user.email)
+      initProtections(user.email, 'CSK - Civil Services Kendra')
     }
+    // Initialize live sessions on component mount
+    initializeSessions()
   },[user])
 
   // Fetch student stats and progress
@@ -117,25 +132,51 @@ export default function Dashboard(){
   }
 
   // ============================================
-  // HANDLE DOWNLOAD
+  // TRACK VIDEO WATCH FROM MODAL
   // ============================================
-  const handleDownload = (material: any) => {
-    // Create a mock download (in real app, this would download from Firebase Storage)
-    const mockPdfs: any = {
-      1: 'GS_Paper_1_Study_Notes.pdf',
-      2: 'Current_Affairs_Monthly.pdf',
-      3: 'Answer_Writing_Guide.pdf'
+  const handleMarkVideoWatched = async () => {
+    if (!user?.uid || !selectedVideo || videoTracked) return
+    
+    try {
+      // Use courseId as a fallback if not available
+      const courseId = selectedVideo.id || Math.random().toString(36).substr(2, 9)
+      await logVideoWatch(
+        user.uid,
+        courseId,
+        selectedVideo.url || '',
+        selectedVideo.title || 'Unknown Video',
+        parseInt(selectedVideo.duration) || 45
+      )
+      setVideoTracked(true)
+      alert('✅ Video marked as watched! Your progress has been updated.')
+    } catch (error: any) {
+      console.error('❌ Failed to track video:', error)
+      alert('Failed to track video. Please try again.')
     }
-    
-    // Create a simple download simulation
-    const fileName = mockPdfs[material.id] || `${material.title}.pdf`
-    
-    // Show success message
-    alert(`📥 Downloading: ${fileName}\n\nFile size: ${material.size}\n\nIn a real application, this would download from cloud storage.`)
-    
-    // Mark as downloaded in UI
-    // In a real app, this would save to database
-    console.log(`Downloaded: ${fileName}`)
+  }
+
+  // Check if user has admin role
+  const handleOpenUploadVideos = async () => {
+    if (!user?.uid) {
+      alert('Please login to access upload features.')
+      navigate('/login')
+      return
+    }
+
+    setCheckingUploadAccess(true)
+    try {
+      const admin = await isUserAdmin(user.uid)
+      if (!admin) {
+        alert('Only admin accounts can upload videos.')
+        return
+      }
+      navigate('/upload-video')
+    } catch (err) {
+      console.error('Upload access check failed:', err)
+      alert('Unable to verify upload access right now. Please try again.')
+    } finally {
+      setCheckingUploadAccess(false)
+    }
   }
 
   // Fallback data in case of loading
@@ -158,10 +199,6 @@ export default function Dashboard(){
     { id: 3, title: "Answer Writing Guide", type: "PDF", size: "3.1 MB", downloaded: false },
   ]
 
-  // Calculate progress percentages
-  const videosProgressPercent = stats ? (stats.videosWatched / (stats.videosWatched + 2)) * 100 : 50
-  const testsProgressPercent = stats ? (stats.mockTestsCompleted / (stats.mockTestsCompleted + 1)) * 100 : 67
-
   return (
     <div className="flex bg-gray-50 min-h-screen">
       {/* Mobile Hamburger Button - Visible on small screens */}
@@ -176,21 +213,29 @@ export default function Dashboard(){
 
       {/* Sidebar - Hidden on mobile, visible on lg+ */}
       <aside className={`fixed lg:static inset-0 lg:inset-auto w-64 bg-white border-r border-gray-200 shadow-lg sticky top-0 h-screen overflow-y-auto transition-all duration-300 z-40 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold">
-              {user?.displayName?.charAt(0).toUpperCase() || 'S'}
-            </div>
-            <div>
-              <p className="font-bold text-gray-900">{user?.displayName || 'Student'}</p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
-            </div>
+        <div className="p-6 border-b border-gray-200 flex flex-col items-center gap-3">
+          {!logoFailed ? (
+            <img 
+              src={logoDataUrl}
+              alt="CSK Logo" 
+              className="w-12 h-12 object-contain"
+              onError={() => setLogoFailed(true)}
+            />
+          ) : (
+            <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">CSK</div>
+          )}
+          <div className="text-center">
+            <h2 className="font-black text-sm text-gray-900">Civil Services Kendra</h2>
+            <p className="text-xs text-gray-500">Your Learning Platform</p>
           </div>
         </div>
 
         <nav className="p-4 space-y-2">
           <button onClick={() => { setActiveTab('overview'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'overview' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
             📊 Overview
+          </button>
+          <button onClick={() => { setActiveTab('live'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'live' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
+            🔴 Live Sessions
           </button>
           <button onClick={() => { setActiveTab('videos'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'videos' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
             🎥 Video Lectures
@@ -209,10 +254,11 @@ export default function Dashboard(){
         {/* UPLOAD VIDEOS BUTTON - For Admins */}
         <div className="p-4 border-t border-gray-200">
           <button 
-            onClick={() => navigate('/upload-video')}
-            className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-lg hover:shadow-lg transition-all transform hover:scale-105"
+            onClick={handleOpenUploadVideos}
+            disabled={checkingUploadAccess}
+            className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-lg hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
           >
-            📹 Upload Videos
+            {checkingUploadAccess ? '⏳ Checking Access...' : '📹 Upload Videos'}
           </button>
         </div>
 
@@ -225,30 +271,6 @@ export default function Dashboard(){
           >
             {loggingOut ? '⏳ Logging out...' : '🚪 Logout'}
           </button>
-        </div>
-
-        <div className="p-4 m-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg border border-indigo-200">
-          <p className="font-bold text-indigo-900 text-sm">📈 Your Progress</p>
-          <div className="mt-3 space-y-2 text-sm">
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-gray-700">Videos Watched</span>
-                <span className="font-bold text-indigo-600">{stats?.videosWatched || 0}/{stats ? (stats.videosWatched + 2) : 2}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-indigo-600 h-2 rounded-full" style={{width: `${videosProgressPercent}%`}}></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-gray-700">Tests Taken</span>
-                <span className="font-bold text-indigo-600">{stats?.mockTestsCompleted || 0}/{stats ? (stats.mockTestsCompleted + 1) : 1}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-indigo-600 h-2 rounded-full" style={{width: `${testsProgressPercent}%`}}></div>
-              </div>
-            </div>
-          </div>
         </div>
       </aside>
 
@@ -263,6 +285,147 @@ export default function Dashboard(){
             ← Back to Home
           </button>
         </div>
+        
+        {activeTab === 'live' && (
+          <div>
+            <h2 className="text-3xl font-black text-gray-900 mb-6">🔴 Live Sessions</h2>
+            
+            {/* Live Now Sessions */}
+            {getLiveSessions().length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-2xl font-black text-gray-900 mb-4">🔴 LIVE NOW</h3>
+                {getLiveSessions().map(session => (
+                  <div key={session.id} className="mb-4 bg-gradient-to-r from-red-500 to-pink-600 rounded-xl p-8 shadow-lg text-white relative overflow-hidden">
+                    <div className="absolute top-4 right-4 flex items-center gap-2 bg-red-700 px-3 py-1 rounded-full text-sm font-bold">
+                      <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                      LIVE NOW
+                    </div>
+                    <h3 className="text-2xl font-black mb-2">{session.title}</h3>
+                    <p className="text-red-100 mb-4">
+                      {session.topic} | 🕒 {formatSessionTime(session.scheduledAt)} | 👨‍🏫 {session.instructor}
+                    </p>
+                    <p className="text-red-100 mb-4">{session.description}</p>
+                    
+                    {/* YouTube Embed */}
+                    {session.youtubeLink && (
+                      <div className="relative bg-black rounded-lg overflow-hidden mb-4" style={{ paddingBottom: '56.25%', height: 0 }}>
+                        <iframe 
+                          className="absolute top-0 left-0 w-full h-full"
+                          src={
+                            session.youtubeLink.includes('/embed/')
+                              ? session.youtubeLink
+                              : `https://www.youtube.com/embed/${session.youtubeLink.split('v=')[1]?.split('&')[0] || ''}`
+                          }
+                          title={session.title}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                          allowFullScreen
+                        ></iframe>
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-4 flex-wrap">
+                      <button
+                        onClick={() => {
+                          if(session.youtubeLink) {
+                            window.open(session.youtubeLink, '_blank')
+                          }
+                        }}
+                        className="px-6 py-2 bg-white text-red-600 font-bold rounded-lg hover:bg-red-50 transition-all"
+                      >
+                        📱 Open in YouTube
+                      </button>
+                      <button
+                        onClick={() => alert('✅ Reminder set for the next session!')}
+                        className="px-6 py-2 bg-red-700 text-white font-bold rounded-lg hover:bg-red-800 transition-all"
+                      >
+                        🔔 Set Reminder
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upcoming Sessions */}
+            {getUpcomingSessions().length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-2xl font-black text-gray-900 mb-4">📅 Upcoming Sessions ({getUpcomingSessions().length})</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {getUpcomingSessions(6).map(session => (
+                    <div key={session.id} className="bg-white rounded-xl p-6 border-2 border-blue-200 hover:shadow-lg transition-all">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h4 className="font-black text-gray-900">{session.title}</h4>
+                          <p className="text-xs text-gray-500 mt-1">{session.topic}</p>
+                        </div>
+                        <span className={`text-xs px-3 py-1 rounded-full font-bold ${getStatusBadgeColor('upcoming')}`}>
+                          {getTimeUntilSession(session.scheduledAt)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">📅 {formatSessionDate(session.scheduledAt)}</p>
+                      <p className="text-sm text-gray-600 mb-2">🕒 {formatSessionTime(session.scheduledAt)}</p>
+                      <p className="text-sm text-gray-600 mb-2">⏱️ {session.duration} mins</p>
+                      <p className="text-sm text-gray-600 mb-3">👨‍🏫 {session.instructor}</p>
+                      {session.description && <p className="text-xs text-gray-600 mb-3">{session.description}</p>}
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            registerForSession(user?.uid || '', session.id)
+                            alert(`✅ Registered for ${session.title}!`)
+                          }}
+                          className="flex-1 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all text-sm"
+                        >
+                          Register
+                        </button>
+                        <button 
+                          onClick={() => alert(`🔔 Reminder set for ${session.title}!`)}
+                          className="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition-all"
+                        >
+                          🔔
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Completed Sessions / Recordings */}
+            {getCompletedSessions().length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-2xl font-black text-gray-900 mb-4">📺 Past Sessions (Replays)</h3>
+                <div className="space-y-3">
+                  {getCompletedSessions(6).map(session => (
+                    <div key={session.id} className="bg-white rounded-xl p-4 border-2 border-green-200 hover:shadow-lg transition-all flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-gray-900">{session.title}</h4>
+                        <p className="text-sm text-gray-600">📅 {formatSessionDate(session.scheduledAt)} • 👨‍🏫 {session.instructor}</p>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          if(session.recordingUrl) {
+                            window.open(session.recordingUrl, '_blank')
+                          }
+                        }}
+                        className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-all text-sm"
+                      >
+                        ▶️ Watch
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* No sessions message */}
+            {getLiveSessions().length === 0 && getUpcomingSessions().length === 0 && getCompletedSessions().length === 0 && (
+              <div className="bg-indigo-50 rounded-xl p-8 border-2 border-indigo-200 text-center">
+                <h3 className="text-xl font-black text-gray-900 mb-2">📅 No Sessions Yet</h3>
+                <p className="text-gray-600">Check back soon for upcoming live classes and sessions!</p>
+              </div>
+            )}
+          </div>
+        )}
         
         {activeTab === 'overview' && (
           <div>
@@ -431,183 +594,19 @@ export default function Dashboard(){
 
         {activeTab === 'materials' && (
           <div>
-            <h2 className="text-3xl font-black text-gray-900 mb-6">Study Materials</h2>
-            <div className="space-y-4">
-              {materials.map(m => (
-                <div key={m.id} className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="text-4xl">📄</div>
-                    <div>
-                      <h3 className="font-black text-gray-900">{m.title}</h3>
-                      <p className="text-sm text-gray-500 mt-1">{m.type} • {m.size}</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => handleDownload(m)}
-                    className={`px-6 py-2 rounded-lg font-bold transition-all ${m.downloaded ? 'bg-green-100 text-green-700 cursor-default' : 'bg-indigo-600 text-white hover:bg-indigo-700 transform hover:scale-105'}`}
-                  >
-                    {m.downloaded ? '✓ Downloaded' : 'Download'}
-                  </button>
-                </div>
-              ))}
-            </div>
+            <FolderView category="study-material" />
           </div>
         )}
 
         {activeTab === 'lectures' && (
           <div>
-            <h2 className="text-3xl font-black text-gray-900 mb-6">📹 Recorded Lectures</h2>
-            <div className="space-y-4">
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border-2 border-indigo-200">
-                <h3 className="font-black text-gray-900 mb-2">📚 Topics Available</h3>
-                <div className="flex flex-wrap gap-2">
-                  {['General Studies', 'Modern History', 'Current Affairs', 'Constitution', 'Economy', 'Science & Tech'].map(topic => (
-                    <button key={topic} className="px-4 py-2 bg-white rounded-full text-sm font-semibold text-indigo-600 border-2 border-indigo-300 hover:bg-indigo-50 transition-all">
-                      {topic}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all">
-                  <div className="aspect-video bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg flex items-center justify-center mb-4">
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">▶️</div>
-                      <p className="text-white text-xs font-bold">45 min</p>
-                    </div>
-                  </div>
-                  <h3 className="font-black text-gray-900">Modern Indian History Basics</h3>
-                  <p className="text-sm text-gray-600 mt-2">Comprehensive overview of India's modern history from 1857</p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xs text-gray-500">👨‍🏫 Dr. Rajesh Kumar</span>
-                    <button 
-                      onClick={() => {
-                        setSelectedVideo({ title: 'Modern Indian History Basics', duration: '45 min', instructor: 'Dr. Rajesh Kumar', description: 'Comprehensive overview of India\'s modern history from 1857', url: 'https://test-streams.mux.dev/x36xhzz/x3iu7ql/medium.mp4' })
-                        setVideoModalOpen(true)
-                      }}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold"
-                    >
-                      ▶ Watch
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all">
-                  <div className="aspect-video bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-lg flex items-center justify-center mb-4">
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">▶️</div>
-                      <p className="text-white text-xs font-bold">38 min</p>
-                    </div>
-                  </div>
-                  <h3 className="font-black text-gray-900">Constitutional Framework of India</h3>
-                  <p className="text-sm text-gray-600 mt-2">Understanding the Constitution and governance structure</p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xs text-gray-500">👨‍🏫 Prof. Meera Singh</span>
-                    <button 
-                      onClick={() => {
-                        setSelectedVideo({ title: 'Constitutional Framework of India', duration: '38 min', instructor: 'Prof. Meera Singh', description: 'Understanding the Constitution and governance structure', url: 'https://www.w3schools.com/html/mov_bbb.mp4' })
-                        setVideoModalOpen(true)
-                      }}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold"
-                    >
-                      ▶ Watch
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all">
-                  <div className="aspect-video bg-gradient-to-br from-orange-600 to-orange-800 rounded-lg flex items-center justify-center mb-4">
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">▶️</div>
-                      <p className="text-white text-xs font-bold">52 min</p>
-                    </div>
-                  </div>
-                  <h3 className="font-black text-gray-900">Indian Economy Overview</h3>
-                  <p className="text-sm text-gray-600 mt-2">Complete guide to economic concepts and policies</p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xs text-gray-500">👨‍🏫 Dr. Arun Patel</span>
-                    <button 
-                      onClick={() => {
-                        setSelectedVideo({ title: 'Indian Economy Overview', duration: '52 min', instructor: 'Dr. Arun Patel', description: 'Complete guide to economic concepts and policies', url: 'https://www.w3schools.com/html/mov_bbb.mp4' })
-                        setVideoModalOpen(true)
-                      }}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold"
-                    >
-                      ▶ Watch
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all">
-                  <div className="aspect-video bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center mb-4">
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">▶️</div>
-                      <p className="text-white text-xs font-bold">41 min</p>
-                    </div>
-                  </div>
-                  <h3 className="font-black text-gray-900">Current Affairs Monthly Special</h3>
-                  <p className="text-sm text-gray-600 mt-2">Latest news and events affecting UPSC exam</p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xs text-gray-500">👨‍🏫 Priya Sharma</span>
-                    <button 
-                      onClick={() => {
-                        setSelectedVideo({ title: 'Current Affairs Monthly Special', duration: '41 min', instructor: 'Priya Sharma', description: 'Latest news and events affecting UPSC exam', url: 'https://www.w3schools.com/html/mov_bbb.mp4' })
-                        setVideoModalOpen(true)
-                      }}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-bold"
-                    >
-                      ▶ Watch
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
-                <p className="text-gray-700 font-semibold">📹 More lectures coming soon!</p>
-                <p className="text-sm text-gray-600 mt-2">Admin panel allows uploading new lectures daily</p>
-              </div>
-            </div>
+            <FolderView category="recorded-lectures" />
           </div>
         )}
 
         {activeTab === 'tests' && (
           <div>
-            <h2 className="text-3xl font-black text-gray-900 mb-6">Mock Tests</h2>
-            {loading ? (
-              <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {testScores.length > 0 ? (
-                  testScores.map(t => (
-                    <div key={t.id} className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:shadow-lg transition-all">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-black text-gray-900 text-lg">{t.testName}</h3>
-                          <p className="text-sm text-gray-600 mt-1">{t.duration} min • {t.totalQuestions} Questions • {t.correctAnswers} Correct</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-3xl font-black text-indigo-600">{t.score}%</p>
-                          <p className="text-xs text-gray-500">Score</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="bg-white rounded-xl p-12 border-2 border-gray-200 text-center">
-                    <p className="text-lg text-gray-600 mb-4">No mock tests taken yet</p>
-                    <button 
-                      onClick={() => alert('🚀 Starting Test Mode...\n\nYou are about to take your first mock test!\n\nFormat: 100 Questions | 2 Hours | All Subjects\n\nClick OK to begin.')}
-                      className="px-6 py-3 bg-yellow-400 text-gray-900 font-bold rounded-lg hover:bg-yellow-300 transition-all transform hover:scale-105"
-                    >
-                      Take Your First Test
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            <FolderView category="mock-tests" />
           </div>
         )}
 
@@ -620,7 +619,10 @@ export default function Dashboard(){
                 <div className="flex justify-between items-center p-4 bg-gray-900">
                   <h3 className="text-white font-black text-lg">{selectedVideo.title}</h3>
                   <button
-                    onClick={() => setVideoModalOpen(false)}
+                    onClick={() => {
+                      setVideoModalOpen(false)
+                      setVideoTracked(false) // Reset after closing
+                    }}
                     className="text-white text-2xl hover:text-gray-300 transition-all"
                   >
                     ✕
@@ -670,8 +672,12 @@ export default function Dashboard(){
                     <p className="text-gray-300">{selectedVideo.description || 'Comprehensive lecture on this topic'}</p>
                   </div>
                   <div className="flex gap-2 pt-4 border-t border-gray-700">
-                    <button className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold transition-all">
-                      ✓ Mark as Watched
+                    <button 
+                      onClick={handleMarkVideoWatched}
+                      disabled={videoTracked}
+                      className={`flex-1 px-4 py-2 rounded-lg font-bold transition-all ${videoTracked ? 'bg-green-600 text-white cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'}`}
+                    >
+                      {videoTracked ? '✓ Watched' : '✓ Mark as Watched'}
                     </button>
                     <button className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-bold transition-all">
                       ⬇️ Download
@@ -686,3 +692,101 @@ export default function Dashboard(){
     </div>
   )
 }
+
+// Sample questions for mock tests
+function getSampleQuestions(testId: string) {
+  const baseQuestions = [
+    {
+      id: 1,
+      question: 'Which of the following is the capital of India?',
+      options: ['Mumbai', 'New Delhi', 'Kolkata', 'Chennai'],
+      correctAnswer: 1,
+      explanation: 'New Delhi is the capital and largest city of India.',
+      category: 'Geography',
+    },
+    {
+      id: 2,
+      question: 'In which year did India gain independence?',
+      options: ['1945', '1947', '1950', '1952'],
+      correctAnswer: 1,
+      explanation: 'India gained independence on August 15, 1947.',
+      category: 'History',
+    },
+    {
+      id: 3,
+      question: 'Who was the first Prime Minister of India?',
+      options: ['Dr. B.R. Ambedkar', 'Jawaharlal Nehru', 'Sardar Vallabhbhai Patel', 'Rajendra Prasad'],
+      correctAnswer: 1,
+      explanation: 'Jawaharlal Nehru was the first Prime Minister of India (1947-1964).',
+      category: 'History',
+    },
+    {
+      id: 4,
+      question: 'What is the maximum number of members in the Lok Sabha?',
+      options: ['500', '545', '552', '600'],
+      correctAnswer: 2,
+      explanation: 'The Lok Sabha (House of the People) can have a maximum of 552 members.',
+      category: 'Polity',
+    },
+    {
+      id: 5,
+      question: 'Which article of the Indian Constitution defines the legislative powers of Parliament?',
+      options: ['Article 79', 'Article 81', 'Article 245', 'Article 256'],
+      correctAnswer: 2,
+      explanation: 'Article 245 defines the extent of the power to make laws by Parliament.',
+      category: 'Polity',
+    },
+    {
+      id: 6,
+      question: 'What is GDP primarily a measure of?',
+      options: ['Population growth', 'Economic output', 'Inflation rate', 'Unemployment'],
+      correctAnswer: 1,
+      explanation: 'GDP (Gross Domestic Product) measures the total economic output of a country.',
+      category: 'Economics',
+    },
+    {
+      id: 7,
+      question: 'Which of the following is NOT a function of the World Bank?',
+      options: ['Lending money to countries', 'Providing technical assistance', 'Making laws for member countries', 'Supporting economic development'],
+      correctAnswer: 2,
+      explanation: 'The World Bank does not make laws; it provides loans and technical assistance for development.',
+      category: 'Economics',
+    },
+    {
+      id: 8,
+      question: 'The monsoon winds in India are driven by:',
+      options: ['Cold currents', 'Pressure differences', 'Coriolis force', 'Ocean waves'],
+      correctAnswer: 1,
+      explanation: 'Monsoon winds are driven by pressure differences between land and ocean.',
+      category: 'Geography',
+    },
+    {
+      id: 9,
+      question: 'Which desert is the largest in Asia?',
+      options: ['Gobi Desert', 'Arabian Desert', 'Taklamakan Desert', 'Kalahari Desert'],
+      correctAnswer: 2,
+      explanation: 'The Taklamakan Desert in China is the largest desert in Asia.',
+      category: 'Geography',
+    },
+    {
+      id: 10,
+      question: 'What is the primary function of the Reserve Bank of India?',
+      options: ['Lending to businesses', 'Controlling monetary policy', 'Taxation', 'Import/export control'],
+      correctAnswer: 1,
+      explanation: 'The RBI is responsible for controlling monetary policy and managing the currency.',
+      category: 'Economics',
+    },
+  ]
+
+  // Return all 10 questions or extend for specific tests
+  if (testId === 'gs-paper-1') {
+    return baseQuestions.slice(0, 10)
+  } else if (testId === 'polity-mock') {
+    return baseQuestions.slice(3, 5).concat(baseQuestions.slice(0, 3)).concat(baseQuestions.slice(5, 10))
+  } else if (testId === 'economics-mock') {
+    return baseQuestions.slice(5, 10).concat(baseQuestions.slice(0, 5))
+  } else {
+    return baseQuestions
+  }
+}
+

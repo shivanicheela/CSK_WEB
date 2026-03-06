@@ -2,13 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCourseById } from '../firebase/firestore.ts';
 import { Course } from '../firebase/firestore.ts';
+import { logVideoWatch } from '../utils/progressTracker.ts';
+import { useAuth } from '../context/AuthContext.tsx';
 
 export default function CourseDetail() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [videoWatched, setVideoWatched] = useState(false);
+
+  // Track video when completed
+  const handleVideoEnded = async () => {
+    if (!user?.uid || !courseId || !course || videoWatched) return;
+    
+    try {
+      await logVideoWatch(
+        user.uid,
+        courseId,
+        course.videoUrl || '',
+        course.title || 'Unknown Course',
+        45 // Default video duration in minutes
+      );
+      setVideoWatched(true);
+      console.log('✅ Video watch tracked successfully');
+    } catch (error: any) {
+      console.error('❌ Failed to track video:', error);
+    }
+  };
 
   useEffect(() => {
     const fetchCourse = async () => {
@@ -186,6 +209,7 @@ export default function CourseDetail() {
                     src={course.videoUrl}
                     controls
                     className="w-full h-80 object-cover"
+                    onEnded={handleVideoEnded}
                   >
                     Your browser does not support the video tag.
                   </video>

@@ -1,4 +1,4 @@
-import { trackVideoWatched, trackMockTestScore, updateStudentProgress } from '../firebase/firestore.ts'
+import { trackVideoWatched, trackMockTestScore, updateStudentProgress, getStudentProgress } from '../firebase/firestore.ts'
 
 /**
  * LOG A VIDEO WATCH EVENT
@@ -16,6 +16,7 @@ export const logVideoWatch = async (
   duration?: number
 ): Promise<void> => {
   try {
+    // First, track the video watched in the collection
     await trackVideoWatched({
       userId,
       courseId,
@@ -26,10 +27,14 @@ export const logVideoWatch = async (
       percentageWatched: 100
     })
     
-    // Update total videos watched
+    // Get current progress to increment properly
+    const currentProgress = await getStudentProgress(userId)
+    const currentVideosWatched = currentProgress?.videosWatched || 0
+    
+    // Update total videos watched (increment properly)
     await updateStudentProgress(userId, {
       lastActivityAt: new Date(),
-      videosWatched: 1 // Increment (you'd need to fetch current count first)
+      videosWatched: currentVideosWatched + 1
     })
     
     console.log('✅ Video watch logged')
@@ -59,6 +64,7 @@ export const logMockTestCompletion = async (
   duration: number
 ): Promise<void> => {
   try {
+    // First, track the test score in the collection
     await trackMockTestScore({
       userId,
       testId,
@@ -70,10 +76,14 @@ export const logMockTestCompletion = async (
       takenAt: new Date()
     })
     
-    // Update test completion count
+    // Get current progress to increment properly
+    const currentProgress = await getStudentProgress(userId)
+    const currentTestsCompleted = currentProgress?.mockTestsCompleted || 0
+    
+    // Update test completion count (increment properly)
     await updateStudentProgress(userId, {
       lastActivityAt: new Date(),
-      mockTestsCompleted: 1 // Increment (you'd need to fetch current count first)
+      mockTestsCompleted: currentTestsCompleted + 1
     })
     
     console.log('✅ Mock test completion logged')

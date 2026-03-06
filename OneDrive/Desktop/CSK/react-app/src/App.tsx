@@ -1,4 +1,5 @@
 import React from 'react'
+import { useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext.tsx'
 import { ProtectedRoute } from './components/ProtectedRoute.tsx'
@@ -19,6 +20,10 @@ import VideoUpload from './pages/VideoUpload.tsx'
 export default function App(){
   const location = useLocation()
   const isActive = (path: string) => location.pathname === path
+  const [logoFailed, setLogoFailed] = useState(false)
+  
+  // CSK Logo as data URL - Professional Bronze Emblem
+  const logoDataUrl = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 320'%3E%3Cdefs%3E%3CradialGradient id='shine' cx='35%25' cy='35%25'%3E%3Cstop offset='0%25' style='stop-color:%23f4d03f;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%23b8860b;stop-opacity:1' /%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='150' cy='150' r='140' fill='%23f5e6d3' stroke='%23b8860b' stroke-width='4'/%3E%3Ccircle cx='150' cy='150' r='130' fill='none' stroke='%23d4af37' stroke-width='2'/%3E%3Cpath d='M 80 100 Q 70 80 90 70 Q 110 60 130 75 L 150 85 L 170 75 Q 190 60 210 70 Q 230 80 220 100' fill='%23b8860b'/%3E%3Ctext x='150' y='155' font-size='52' font-weight='bold' text-anchor='middle' fill='%23b8860b' font-family='Georgia, serif'%3ECSK%3C/text%3E%3Ctext x='150' y='220' font-size='14' text-anchor='middle' fill='%23b8860b' font-family='Georgia, serif' font-weight='bold'%3ECIVIL SERVICES KENDRA%3C/text%3E%3Ctext x='150' y='245' font-size='10' text-anchor='middle' fill='%238b7500' font-family='serif'%3EMISSION: IAS | VISION: INDIA%3C/text%3E%3C/svg%3E"
 
   return (
     <AuthProvider>
@@ -27,9 +32,18 @@ export default function App(){
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           {/* Logo & Branding */}
           <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-lg flex items-center justify-center shadow-lg group-hover:shadow-indigo-500/50 transition-all">
-              <span className="text-white font-bold text-lg">CSK</span>
-            </div>
+            {!logoFailed ? (
+              <img 
+                src={logoDataUrl}
+                alt="CSK Logo" 
+                className="w-12 h-12 object-contain group-hover:scale-110 transition-transform"
+                onError={() => setLogoFailed(true)}
+              />
+            ) : (
+              <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-lg flex items-center justify-center shadow-lg group-hover:shadow-indigo-500/50 transition-all">
+                <span className="text-white font-bold text-lg">CSK</span>
+              </div>
+            )}
             <div className="hidden sm:block">
               <div className="text-sm font-bold bg-gradient-to-r from-indigo-600 to-indigo-700 bg-clip-text text-transparent">CSK</div>
               <div className="text-xs text-gray-500">Civil Services Kendra</div>

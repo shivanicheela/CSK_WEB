@@ -6,22 +6,22 @@ export default function UPSC(){
   const navigate = useNavigate()
   const programs = [
     {
-      title: "Foundation Batch",
-      desc: "Perfect for beginners. Learn basics of GS, current affairs, and essay writing from scratch.",
-      price: "₹9,999",
-      features: ["200+ HD Videos", "Weekly Live Classes", "PDF Study Materials", "Monthly Tests", "Doubt Support", "12 Months Access"]
+      title: "UPSC Prelims Focused",
+      desc: "Master the fundamentals and clear the CSAT + GS hurdle with comprehensive concept coverage and PYQ analysis.",
+      price: "₹7,999",
+      features: ["250+ HD Concept Videos: Complete GS (Static + Dynamic) & CSAT coverage", "PYQ Trend Analysis: Deep-dive into UPSC's evolving question patterns and logic", "Teaching in Tamil | Standard English study materials", "Pre-Session PDFs: Daily high-yield notes provided before every lecture", "Current Affairs Plus: Integration of The Hindu, IE, and PIB for UPSC standards", "Prelims Test Series: Standard-quality mocks with detailed performance analytics"]
     },
     {
-      title: "Mains Focused",
-      desc: "Advanced program designed for answer writing, strategy, and mains preparation.",
-      price: "₹14,999",
-      features: ["150+ Mains Videos", "Bi-weekly Live Classes", "Answer Sheets Review", "Subject Guidance", "Ethics & Essay Coaching", "12 Months Access"]
+      title: "Integrated Prelims + Mains",
+      desc: "A holistic approach for the serious civil service aspirant with comprehensive coverage of all GS papers and essay.",
+      price: "₹12,999",
+      features: ["500+ Analytical Videos: Comprehensive coverage of GS Papers I-IV and Essay", "Thematic PYQ Mapping: Topic-wise analysis of the last 10 years of UPSC Mains", "Teaching in Tamil | Standard English materials", "Mains Answer Lab: Periodic answer writing practice with expert evaluation", "Daily Prep Support: Subject-wise PDFs delivered daily to keep you ahead", "Integrated Test Series: Combined Prelims Mocks + Mains Answer Evaluation"]
     },
     {
-      title: "Premium + Interview",
-      desc: "All-inclusive program with personality test, interview coaching, and one-on-one mentoring.",
-      price: "₹24,999",
-      features: ["All Videos + Resources", "Weekly Live Classes", "One-on-One Mentoring", "Mock Interviews", "Personality Development", "18 Months Access"]
+      title: "1-on-1 Executive Coaching",
+      desc: "Premium, on-demand mentorship for busy professionals with personalized guidance and flexible scheduling.",
+      price: "₹19,999",
+      features: ["Private Live Sessions: Daily 1-on-1 coaching scheduled at your convenience", "Executive Flexibility: A dynamic study plan that adapts to your work-life shifts", "Zero-Doubt Guarantee: We explain complex UPSC concepts until they are 100% clear", "Personalized PYQ Strategy: Target high-weightage topics to maximize limited study time", "Instant Feedback: Real-time correction of your Answer Writing and Logic", "Efficiency First: A No-Waste roadmap focused purely on clearing the cutoff"]
     }
   ]
 

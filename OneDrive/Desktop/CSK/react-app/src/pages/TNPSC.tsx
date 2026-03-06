@@ -6,22 +6,22 @@ export default function TNPSC(){
   const navigate = useNavigate()
   const programs = [
     {
-      title: "TNPSC Group 4 Mastery",
-      desc: "Complete preparation for Tamil Nadu Public Service Commission Group 4 exams with state-specific content.",
+      title: "Prelims Oriented",
+      desc: "Build your foundation for the first hurdle with comprehensive syllabus coverage and previous year question focus.",
       price: "₹5,999",
-      features: ["180+ HD Videos", "Weekly Live Classes", "Tamil Nadu Current Affairs", "Monthly Tests", "State-focused Strategy", "12 Months Access"]
+      features: ["180+ HD Video Lessons (Syllabus-wise)", "PYQ Focused: In-depth analysis of Previous Year Questions", "Teaching in Tamil | Materials in English", "Daily PDF Support: Notes provided before every session", "TN Special: State-focused Current Affairs & Schemes", "Test Series: Standard Prelims Mock Tests"]
     },
     {
-      title: "Combined Civil Services",
-      desc: "Comprehensive program for TNPSC combined civil services with advanced guidance and personalized support.",
-      price: "₹12,999",
-      features: ["250+ Videos", "Bi-weekly Live Classes", "Answer Writing Coaching", "Subject Expertise", "Interview Prep", "18 Months Access"]
+      title: "Prelims + Mains",
+      desc: "Comprehensive coaching for the complete journey covering both prelims and mains with integrated preparation strategy.",
+      price: "₹9,999",
+      features: ["350+ In-depth Videos (Prelims & Mains)", "PYQ Focused: Topic-wise Previous Year Question mapping", "Teaching in Tamil | Materials in English", "Daily PDF Support: Pre-session study notes", "Writing Practice: Mains Answer Evaluation & Feedback", "Test Series: Integrated Prelims + Mains Mock Exams"]
     },
     {
-      title: "Premium Executive Pack",
-      desc: "All-inclusive package with mentoring, mock interviews, and career guidance for maximum success.",
-      price: "₹19,999",
-      features: ["All Content Included", "Weekly Mentoring Sessions", "Mock Interviews", "One-on-One Guidance", "Career Counseling", "24 Months Access"]
+      title: "One-to-One Coaching",
+      desc: "Your own private tutor for personalized success with daily live sessions and real-time feedback tailored to your pace.",
+      price: "₹14,999",
+      features: ["Personalized Live Classes: Daily 1-on-1 sessions", "PYQ Strategy: Personalized drill on high-weightage topics", "Custom Study Plan: Tailored to your pace & schedule (For working professionals)", "Real-time Feedback: Instant answer writing correction", "Zero-Doubt Guarantee: We stay on a topic and re-explain until your doubt is 100% resolved"]
     }
   ]
 
