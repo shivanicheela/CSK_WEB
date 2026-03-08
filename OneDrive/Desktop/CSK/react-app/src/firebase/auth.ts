@@ -121,26 +121,35 @@ export const loginWithGoogle = async (): Promise<User> => {
  * @param {string} containerId - HTML element ID for reCAPTCHA
  * @returns {Promise<ConfirmationResult>} Confirmation result for OTP verification
  */
+// Keep a single reCAPTCHA instance to avoid "already rendered" errors
+let recaptchaVerifierInstance: RecaptchaVerifier | null = null;
+
+export const clearRecaptcha = () => {
+  if (recaptchaVerifierInstance) {
+    try { recaptchaVerifierInstance.clear(); } catch {}
+    recaptchaVerifierInstance = null;
+  }
+  // Also clear the DOM container so Firebase can re-render it
+  const el = document.getElementById('recaptcha-container');
+  if (el) el.innerHTML = '';
+};
+
 export const loginWithPhone = async (phoneNumber: string, containerId: string): Promise<any> => {
   try {
-    // Create reCAPTCHA verifier
-    const recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
+    // Clear any existing reCAPTCHA before creating a new one
+    clearRecaptcha();
+
+    recaptchaVerifierInstance = new RecaptchaVerifier(auth, containerId, {
       size: 'invisible',
-      callback: (response: any) => {
-        console.log('reCAPTCHA verified:', response);
-      },
-      'expired-callback': () => {
-        console.log('reCAPTCHA expired');
-      }
+      callback: () => {},
+      'expired-callback': () => { clearRecaptcha(); }
     });
 
-    // Send verification code to phone
-    const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+    const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifierInstance);
     console.log('✅ Verification code sent to:', phoneNumber);
-    
-    // Return confirmation result for OTP verification
     return confirmationResult;
   } catch (error: any) {
+    clearRecaptcha();
     console.error('❌ Phone login error:', error.message);
     throw error;
   }

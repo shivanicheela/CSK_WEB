@@ -1,10 +1,20 @@
 import React, {useState} from 'react'
 import { useNavigate } from 'react-router-dom'
 import VideoUpload from './VideoUpload.tsx'
+import { enrollUserInCourse, getUserEnrolledCourses, removeUserEnrollment } from '../firebase/firestore.ts'
 
 export default function Admin(){
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('dashboard')
+
+  // Enrollment Manager State
+  const [enrollEmail, setEnrollEmail] = useState('')
+  const [enrollUserId, setEnrollUserId] = useState('')
+  const [enrollCourseType, setEnrollCourseType] = useState<'UPSC' | 'TNPSC' | 'BOTH'>('UPSC')
+  const [enrollLoading, setEnrollLoading] = useState(false)
+  const [enrollMessage, setEnrollMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
+  const [checkUserId, setCheckUserId] = useState('')
+  const [userCourses, setUserCourses] = useState<string[] | null>(null)
 
   const stats = [
     { label: 'Total Students', value: '8,245', change: '+12%', icon: '👥' },
@@ -71,6 +81,12 @@ export default function Admin(){
               className={`py-4 px-2 font-bold text-sm border-b-4 transition-all ${activeTab === 'lectures' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-700 hover:text-gray-900'}`}
             >
               📹 Lectures
+            </button>
+            <button
+              onClick={() => setActiveTab('enrollments')}
+              className={`py-4 px-2 font-bold text-sm border-b-4 transition-all ${activeTab === 'enrollments' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-700 hover:text-gray-900'}`}
+            >
+              🎓 Enrollments
             </button>
             <button 
               onClick={() => setActiveTab('reports')}
@@ -254,6 +270,212 @@ export default function Admin(){
         {/* Lectures Tab */}
         {activeTab === 'lectures' && (
           <VideoUpload />
+        )}
+
+        {/* Enrollments Tab - Manual Enrollment Manager */}
+        {activeTab === 'enrollments' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-700 rounded-xl p-6 text-white">
+              <h2 className="text-2xl font-black mb-2">🎓 Student Enrollment Manager</h2>
+              <p className="text-indigo-100">Manually enroll users in courses for testing (No payment gateway required)</p>
+            </div>
+
+            {/* Enroll User Section */}
+            <div className="bg-white rounded-xl shadow-lg border-2 border-gray-200 p-8">
+              <h3 className="text-xl font-black text-gray-900 mb-6">➕ Enroll New User</h3>
+
+              {enrollMessage && (
+                <div className={`mb-6 p-4 rounded-lg border-2 ${enrollMessage.type === 'success' ? 'bg-green-50 border-green-500 text-green-800' : 'bg-red-50 border-red-500 text-red-800'}`}>
+                  <p className="font-bold">{enrollMessage.text}</p>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">User ID (Firebase UID)</label>
+                  <input
+                    type="text"
+                    value={enrollUserId}
+                    onChange={(e) => setEnrollUserId(e.target.value)}
+                    placeholder="Enter Firebase User ID"
+                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:border-indigo-600 outline-none"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">You can find this in Firebase Authentication console</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">User Email</label>
+                  <input
+                    type="email"
+                    value={enrollEmail}
+                    onChange={(e) => setEnrollEmail(e.target.value)}
+                    placeholder="user@example.com"
+                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:border-indigo-600 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Course Type</label>
+                  <select
+                    value={enrollCourseType}
+                    onChange={(e) => setEnrollCourseType(e.target.value as 'UPSC' | 'TNPSC' | 'BOTH')}
+                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:border-indigo-600 outline-none bg-white"
+                  >
+                    <option value="UPSC">UPSC Only</option>
+                    <option value="TNPSC">TNPSC Only</option>
+                    <option value="BOTH">Both UPSC & TNPSC</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    if (!enrollUserId || !enrollEmail) {
+                      setEnrollMessage({type: 'error', text: 'Please fill all fields'})
+                      return
+                    }
+
+                    setEnrollLoading(true)
+                    setEnrollMessage(null)
+
+                    try {
+                      await enrollUserInCourse(enrollUserId, enrollEmail, enrollCourseType)
+                      setEnrollMessage({
+                        type: 'success',
+                        text: `✅ Successfully enrolled ${enrollEmail} in ${enrollCourseType} courses!`
+                      })
+                      setEnrollUserId('')
+                      setEnrollEmail('')
+                    } catch (error: any) {
+                      setEnrollMessage({
+                        type: 'error',
+                        text: `❌ Error: ${error.message}`
+                      })
+                    } finally {
+                      setEnrollLoading(false)
+                    }
+                  }}
+                  disabled={enrollLoading}
+                  className="w-full px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-lg rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {enrollLoading ? '⏳ Enrolling...' : '✅ Enroll User'}
+                </button>
+              </div>
+            </div>
+
+            {/* Check User Enrollments Section */}
+            <div className="bg-white rounded-xl shadow-lg border-2 border-gray-200 p-8">
+              <h3 className="text-xl font-black text-gray-900 mb-6">🔍 Check User Enrollments</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">User ID to Check</label>
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      value={checkUserId}
+                      onChange={(e) => setCheckUserId(e.target.value)}
+                      placeholder="Enter Firebase User ID"
+                      className="flex-1 border-2 border-gray-300 rounded-lg px-4 py-3 focus:border-indigo-600 outline-none"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!checkUserId) return
+
+                        try {
+                          const courses = await getUserEnrolledCourses(checkUserId)
+                          setUserCourses(courses)
+                        } catch (error) {
+                          console.error(error)
+                          setUserCourses([])
+                        }
+                      }}
+                      className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all"
+                    >
+                      Check
+                    </button>
+                  </div>
+                </div>
+
+                {userCourses !== null && (
+                  <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-300">
+                    <h4 className="font-black text-gray-900 mb-3">Enrolled Courses:</h4>
+                    {userCourses.length > 0 ? (
+                      <div className="space-y-2">
+                        {userCourses.map((course) => (
+                          <div key={course} className="flex items-center gap-2 text-gray-800">
+                            <span className="text-green-600 font-bold text-xl">✓</span>
+                            <span className="font-bold">{course}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-gray-700 font-semibold">❌ No enrollments found for this user</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-6">
+              <h3 className="text-lg font-black text-gray-900 mb-3">📌 How to Use</h3>
+              <ol className="space-y-2 text-sm text-gray-800">
+                <li className="flex gap-2">
+                  <span className="font-bold">1.</span>
+                  <span>Go to Firebase Console → Authentication → Find the user</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-bold">2.</span>
+                  <span>Copy the User UID (unique identifier)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-bold">3.</span>
+                  <span>Enter the UID and email above</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-bold">4.</span>
+                  <span>Select course type (UPSC, TNPSC, or BOTH)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-bold">5.</span>
+                  <span>Click "Enroll User" - Done! The user now has access</span>
+                </li>
+              </ol>
+            </div>
+
+            {/* Testing Guide */}
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl p-6">
+              <h3 className="text-lg font-black text-gray-900 mb-3">🧪 Testing Access Control</h3>
+              <div className="space-y-3 text-sm text-gray-800">
+                <div className="p-4 bg-white rounded-lg border border-purple-200">
+                  <p className="font-bold mb-2">Test Case 1: UPSC Only Access</p>
+                  <ul className="space-y-1 ml-4">
+                    <li>• Enroll user in "UPSC Only"</li>
+                    <li>• User CAN access /upsc page ✅</li>
+                    <li>• User CANNOT access /tnpsc page ❌ (will see Access Restricted)</li>
+                  </ul>
+                </div>
+
+                <div className="p-4 bg-white rounded-lg border border-purple-200">
+                  <p className="font-bold mb-2">Test Case 2: TNPSC Only Access</p>
+                  <ul className="space-y-1 ml-4">
+                    <li>• Enroll user in "TNPSC Only"</li>
+                    <li>• User CAN access /tnpsc page ✅</li>
+                    <li>• User CANNOT access /upsc page ❌ (will see Access Restricted)</li>
+                  </ul>
+                </div>
+
+                <div className="p-4 bg-white rounded-lg border border-purple-200">
+                  <p className="font-bold mb-2">Test Case 3: Full Access</p>
+                  <ul className="space-y-1 ml-4">
+                    <li>• Enroll user in "Both UPSC & TNPSC"</li>
+                    <li>• User CAN access /upsc page ✅</li>
+                    <li>• User CAN access /tnpsc page ✅</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Reports Tab */}

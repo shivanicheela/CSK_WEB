@@ -37,6 +37,56 @@ export const FOLDER_STRUCTURE = {
   }
 }
 
+// Mock Test specific structure
+export const MOCK_TEST_STRUCTURE = {
+  UPSC: {
+    'Full Length Mock Test': [
+      'UPSC Prelims Full Test 1',
+      'UPSC Prelims Full Test 2',
+      'UPSC Prelims Full Test 3',
+      'UPSC Mains Full Test 1',
+      'UPSC Mains Full Test 2',
+      'UPSC Integrated Test 1'
+    ],
+    'Subject Specific Mock Test': [
+      'Indian Polity Test',
+      'History Test',
+      'Indian Economy Test',
+      'Geography Test',
+      'Environment Test',
+      'Science and Tech Test',
+      'Current Affairs Test',
+      'CSAT Test',
+      'GS Paper 1 Test',
+      'GS Paper 2 Test',
+      'GS Paper 3 Test',
+      'GS Paper 4 Test'
+    ]
+  },
+  TNPSC: {
+    'Full Length Mock Test': [
+      'TNPSC Prelims Full Test 1',
+      'TNPSC Prelims Full Test 2',
+      'TNPSC Prelims Full Test 3',
+      'TNPSC Mains Full Test 1',
+      'TNPSC Mains Full Test 2',
+      'TNPSC Integrated Test 1'
+    ],
+    'Subject Specific Mock Test': [
+      'Indian Polity Test',
+      'History Test (Indian + INM + TN)',
+      'Geography Test',
+      'Indian Economy Test',
+      'Unit 9 Test',
+      'Current Affairs Test',
+      'Aptitude Test',
+      'GS Paper 1 Test',
+      'GS Paper 2 Test',
+      'GS Paper 3 Test'
+    ]
+  }
+}
+
 export const RESOURCE_CATEGORIES = [
   {
     id: 'study-material',
@@ -60,7 +110,13 @@ export const RESOURCE_CATEGORIES = [
 
 export type ExamType = 'UPSC' | 'TNPSC'
 export type LevelType = 'Prelims' | 'Mains'
+export type MockTestType = 'Full Length Mock Test' | 'Subject Specific Mock Test'
 
 export const getSubjects = (exam: ExamType, level: LevelType): string[] => {
   return FOLDER_STRUCTURE[exam]?.[level] || []
 }
+
+export const getMockTestItems = (exam: ExamType, testType: MockTestType): string[] => {
+  return MOCK_TEST_STRUCTURE[exam]?.[testType] || []
+}
+

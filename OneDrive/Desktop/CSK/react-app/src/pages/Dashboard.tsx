@@ -6,8 +6,7 @@ import { getStudentStats, getVideosWatchedByUser, getMockTestScoresByUser, isUse
 import { initProtections } from '../utils/protections'
 import MockTestEngine from '../components/MockTestEngine'
 import FolderView from '../components/FolderView'
-import { logVideoWatch } from '../utils/progressTracker.ts'
-import { initializeSessions, getUpcomingSessions, getLiveSessions, getCompletedSessions, formatSessionDate, formatSessionTime, getTimeUntilSession, getStatusBadgeColor, getStatusEmoji, registerForSession } from '../utils/liveSessionManager.ts'
+import { logVideoWatch, logMockTestCompletion } from '../utils/progressTracker.ts'
 import { SAMPLE_MATERIALS, organizeByCategory } from '../utils/resourceManager.ts'
 
 interface Stats {
@@ -22,12 +21,8 @@ interface Stats {
 export default function Dashboard(){
   const [activeTab, setActiveTab] = useState('overview')
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [logoFailed, setLogoFailed] = useState(false)
-  const { user } = useAuth()
+  const { user, enrolledCourses, isAdmin } = useAuth()
   const navigate = useNavigate()
-  
-  // CSK Logo as data URL - Professional Bronze Emblem
-  const logoDataUrl = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 320'%3E%3Cdefs%3E%3CradialGradient id='shine' cx='35%25' cy='35%25'%3E%3Cstop offset='0%25' style='stop-color:%23f4d03f;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%23b8860b;stop-opacity:1' /%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='150' cy='150' r='140' fill='%23f5e6d3' stroke='%23b8860b' stroke-width='4'/%3E%3Ccircle cx='150' cy='150' r='130' fill='none' stroke='%23d4af37' stroke-width='2'/%3E%3Cpath d='M 80 100 Q 70 80 90 70 Q 110 60 130 75 L 150 85 L 170 75 Q 190 60 210 70 Q 230 80 220 100' fill='%23b8860b'/%3E%3Ctext x='150' y='155' font-size='52' font-weight='bold' text-anchor='middle' fill='%23b8860b' font-family='Georgia, serif'%3ECSK%3C/text%3E%3Ctext x='150' y='220' font-size='14' text-anchor='middle' fill='%23b8860b' font-family='Georgia, serif' font-weight='bold'%3ECIVIL SERVICES KENDRA%3C/text%3E%3Ctext x='150' y='245' font-size='10' text-anchor='middle' fill='%238b7500' font-family='serif'%3EMISSION: IAS | VISION: INDIA%3C/text%3E%3C/svg%3E"
   const [loggingOut, setLoggingOut] = useState(false)
   const [selectedVideo, setSelectedVideo] = useState<any>(null)
   const [videoModalOpen, setVideoModalOpen] = useState(false)
@@ -42,31 +37,76 @@ export default function Dashboard(){
   const [testScores, setTestScores] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
+
+  // State for notes feature
+  const [notesModalOpen, setNotesModalOpen] = useState(false)
+  const [notesContent, setNotesContent] = useState('')
+  const [savedNotes, setSavedNotes] = useState<{[key: string]: string}>({})
+  const [currentNoteSession, setCurrentNoteSession] = useState<string>('')
+
+  // Demo data for testing/preview
+  const [showDemoData, setShowDemoData] = useState(false)
+
+  // Use displayed stats (real or demo)
+  const displayStats = showDemoData && (!stats?.videosWatched || stats.videosWatched === 0) ? {
+    totalHoursWatched: 24.5,
+    videosWatched: 32,
+    mockTestsCompleted: 8,
+    averageTestScore: 78,
+    currentStreak: 12,
+    allTestScores: []
+  } : stats
+
+  const displayVideos = showDemoData && videosWatched.length === 0 ? [
+    { id: '1', videoTitle: 'Indian Polity - Fundamentals', duration: '45 min', watchedAt: { toDate: () => new Date() } },
+    { id: '2', videoTitle: 'Modern History - Freedom Struggle', duration: '52 min', watchedAt: { toDate: () => new Date() } },
+    { id: '3', videoTitle: 'Economics - GDP & Inflation', duration: '38 min', watchedAt: { toDate: () => new Date() } }
+  ] : videosWatched
+
+  const displayTestScores = showDemoData && testScores.length === 0 ? [
+    { id: '1', testName: 'General Studies - Paper 1', score: 82, takenAt: { toDate: () => new Date() } },
+    { id: '2', testName: 'Current Affairs Test', score: 75, takenAt: { toDate: () => new Date() } }
+  ] : testScores
+
   useEffect(()=>{
     if (user?.email) {
       initProtections(user.email, 'CSK - Civil Services Kendra')
     }
-    // Initialize live sessions on component mount
-    initializeSessions()
   },[user])
 
   // Fetch student stats and progress
   useEffect(() => {
     const fetchStudentData = async () => {
-      if (!user?.uid) return
-      
+      if (!user?.uid) {
+        // Set defaults immediately for non-logged in users
+        setStats({
+          totalHoursWatched: 0,
+          videosWatched: 0,
+          mockTestsCompleted: 0,
+          averageTestScore: 0,
+          currentStreak: 0,
+          allTestScores: []
+        })
+        setLoading(false)
+        return
+      }
+
       try {
         setLoading(true)
         setError(null)
         
-        // Fetch all stats with error handling
-        try {
-          const studentStats = await getStudentStats(user.uid)
-          setStats(studentStats)
-        } catch (statsErr) {
-          console.warn('⚠️ Could not fetch stats, using defaults:', statsErr)
-          // Use default stats for new users
+        // Fetch ALL data in parallel with Promise.allSettled for faster loading
+        const [statsResult, videosResult, scoresResult] = await Promise.allSettled([
+          getStudentStats(user.uid),
+          getVideosWatchedByUser(user.uid),
+          getMockTestScoresByUser(user.uid)
+        ])
+
+        // Process stats
+        if (statsResult.status === 'fulfilled') {
+          setStats(statsResult.value)
+        } else {
+          console.warn('⚠️ Stats unavailable, using defaults')
           setStats({
             totalHoursWatched: 0,
             videosWatched: 0,
@@ -77,30 +117,26 @@ export default function Dashboard(){
           })
         }
         
-        // Fetch videos watched with error handling
-        try {
-          const videos = await getVideosWatchedByUser(user.uid)
-          setVideosWatched(videos)
-        } catch (videosErr) {
-          console.warn('⚠️ Could not fetch videos, using empty array:', videosErr)
+        // Process videos
+        if (videosResult.status === 'fulfilled') {
+          setVideosWatched(videosResult.value)
+        } else {
+          console.warn('⚠️ Videos unavailable')
           setVideosWatched([])
         }
         
-        // Fetch test scores with error handling
-        try {
-          const scores = await getMockTestScoresByUser(user.uid)
-          setTestScores(scores)
-        } catch (scoresErr) {
-          console.warn('⚠️ Could not fetch test scores, using empty array:', scoresErr)
+        // Process test scores
+        if (scoresResult.status === 'fulfilled') {
+          setTestScores(scoresResult.value)
+        } else {
+          console.warn('⚠️ Test scores unavailable')
           setTestScores([])
         }
-        
-        // Clear error if we successfully loaded with defaults
-        setError(null)
-        
+
+
       } catch (err: any) {
         console.error('Failed to fetch student data:', err)
-        // Don't show error - just use defaults
+        // Use defaults on error
         setStats({
           totalHoursWatched: 0,
           videosWatched: 0,
@@ -113,8 +149,26 @@ export default function Dashboard(){
         setLoading(false)
       }
     }
-    
+
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn('⚠️ Loading timeout - using default data')
+        setStats({
+          totalHoursWatched: 0,
+          videosWatched: 0,
+          mockTestsCompleted: 0,
+          averageTestScore: 0,
+          currentStreak: 0,
+          allTestScores: []
+        })
+        setLoading(false)
+      }
+    }, 3000) // 3 second timeout
+
     fetchStudentData()
+
+    return () => clearTimeout(timeoutId)
   }, [user?.uid])
 
   // ============================================
@@ -156,27 +210,19 @@ export default function Dashboard(){
   }
 
   // Check if user has admin role
-  const handleOpenUploadVideos = async () => {
+  const handleOpenUploadVideos = () => {
     if (!user?.uid) {
       alert('Please login to access upload features.')
       navigate('/login')
       return
     }
 
-    setCheckingUploadAccess(true)
-    try {
-      const admin = await isUserAdmin(user.uid)
-      if (!admin) {
-        alert('Only admin accounts can upload videos.')
-        return
-      }
-      navigate('/upload-video')
-    } catch (err) {
-      console.error('Upload access check failed:', err)
-      alert('Unable to verify upload access right now. Please try again.')
-    } finally {
-      setCheckingUploadAccess(false)
+    if (!isAdmin) {
+      alert('Only admin accounts can upload videos.')
+      return
     }
+
+    navigate('/upload-video')
   }
 
   // Fallback data in case of loading
@@ -214,19 +260,16 @@ export default function Dashboard(){
       {/* Sidebar - Hidden on mobile, visible on lg+ */}
       <aside className={`fixed lg:static inset-0 lg:inset-auto w-64 bg-white border-r border-gray-200 shadow-lg sticky top-0 h-screen overflow-y-auto transition-all duration-300 z-40 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="p-6 border-b border-gray-200 flex flex-col items-center gap-3">
-          {!logoFailed ? (
-            <img 
-              src={logoDataUrl}
-              alt="CSK Logo" 
-              className="w-12 h-12 object-contain"
-              onError={() => setLogoFailed(true)}
-            />
-          ) : (
-            <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">CSK</div>
-          )}
+          <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-full flex items-center justify-center shadow-lg">
+            {isAdmin ? (
+              <span className="text-white text-2xl">👤</span>
+            ) : (
+              <span className="text-white font-black text-base tracking-wide">CSK</span>
+            )}
+          </div>
           <div className="text-center">
-            <h2 className="font-black text-sm text-gray-900">Civil Services Kendra</h2>
-            <p className="text-xs text-gray-500">Your Learning Platform</p>
+            <h2 className="font-black text-sm text-gray-900">{isAdmin ? 'Admin' : 'Civil Services Kendra'}</h2>
+            <p className="text-xs text-gray-500">{isAdmin ? 'Administrator Panel' : 'Your Learning Platform'}</p>
           </div>
         </div>
 
@@ -234,11 +277,8 @@ export default function Dashboard(){
           <button onClick={() => { setActiveTab('overview'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'overview' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
             📊 Overview
           </button>
-          <button onClick={() => { setActiveTab('live'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'live' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
-            🔴 Live Sessions
-          </button>
           <button onClick={() => { setActiveTab('videos'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'videos' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
-            🎥 Video Lectures
+            🔴 Live Sessions
           </button>
           <button onClick={() => { setActiveTab('lectures'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'lectures' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
             📹 Recorded Lectures
@@ -286,151 +326,10 @@ export default function Dashboard(){
           </button>
         </div>
         
-        {activeTab === 'live' && (
-          <div>
-            <h2 className="text-3xl font-black text-gray-900 mb-6">🔴 Live Sessions</h2>
-            
-            {/* Live Now Sessions */}
-            {getLiveSessions().length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-2xl font-black text-gray-900 mb-4">🔴 LIVE NOW</h3>
-                {getLiveSessions().map(session => (
-                  <div key={session.id} className="mb-4 bg-gradient-to-r from-red-500 to-pink-600 rounded-xl p-8 shadow-lg text-white relative overflow-hidden">
-                    <div className="absolute top-4 right-4 flex items-center gap-2 bg-red-700 px-3 py-1 rounded-full text-sm font-bold">
-                      <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-                      LIVE NOW
-                    </div>
-                    <h3 className="text-2xl font-black mb-2">{session.title}</h3>
-                    <p className="text-red-100 mb-4">
-                      {session.topic} | 🕒 {formatSessionTime(session.scheduledAt)} | 👨‍🏫 {session.instructor}
-                    </p>
-                    <p className="text-red-100 mb-4">{session.description}</p>
-                    
-                    {/* YouTube Embed */}
-                    {session.youtubeLink && (
-                      <div className="relative bg-black rounded-lg overflow-hidden mb-4" style={{ paddingBottom: '56.25%', height: 0 }}>
-                        <iframe 
-                          className="absolute top-0 left-0 w-full h-full"
-                          src={
-                            session.youtubeLink.includes('/embed/')
-                              ? session.youtubeLink
-                              : `https://www.youtube.com/embed/${session.youtubeLink.split('v=')[1]?.split('&')[0] || ''}`
-                          }
-                          title={session.title}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                          allowFullScreen
-                        ></iframe>
-                      </div>
-                    )}
-                    
-                    <div className="flex gap-4 flex-wrap">
-                      <button
-                        onClick={() => {
-                          if(session.youtubeLink) {
-                            window.open(session.youtubeLink, '_blank')
-                          }
-                        }}
-                        className="px-6 py-2 bg-white text-red-600 font-bold rounded-lg hover:bg-red-50 transition-all"
-                      >
-                        📱 Open in YouTube
-                      </button>
-                      <button
-                        onClick={() => alert('✅ Reminder set for the next session!')}
-                        className="px-6 py-2 bg-red-700 text-white font-bold rounded-lg hover:bg-red-800 transition-all"
-                      >
-                        🔔 Set Reminder
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Upcoming Sessions */}
-            {getUpcomingSessions().length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-2xl font-black text-gray-900 mb-4">📅 Upcoming Sessions ({getUpcomingSessions().length})</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {getUpcomingSessions(6).map(session => (
-                    <div key={session.id} className="bg-white rounded-xl p-6 border-2 border-blue-200 hover:shadow-lg transition-all">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h4 className="font-black text-gray-900">{session.title}</h4>
-                          <p className="text-xs text-gray-500 mt-1">{session.topic}</p>
-                        </div>
-                        <span className={`text-xs px-3 py-1 rounded-full font-bold ${getStatusBadgeColor('upcoming')}`}>
-                          {getTimeUntilSession(session.scheduledAt)}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-2">📅 {formatSessionDate(session.scheduledAt)}</p>
-                      <p className="text-sm text-gray-600 mb-2">🕒 {formatSessionTime(session.scheduledAt)}</p>
-                      <p className="text-sm text-gray-600 mb-2">⏱️ {session.duration} mins</p>
-                      <p className="text-sm text-gray-600 mb-3">👨‍🏫 {session.instructor}</p>
-                      {session.description && <p className="text-xs text-gray-600 mb-3">{session.description}</p>}
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => {
-                            registerForSession(user?.uid || '', session.id)
-                            alert(`✅ Registered for ${session.title}!`)
-                          }}
-                          className="flex-1 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all text-sm"
-                        >
-                          Register
-                        </button>
-                        <button 
-                          onClick={() => alert(`🔔 Reminder set for ${session.title}!`)}
-                          className="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition-all"
-                        >
-                          🔔
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Completed Sessions / Recordings */}
-            {getCompletedSessions().length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-2xl font-black text-gray-900 mb-4">📺 Past Sessions (Replays)</h3>
-                <div className="space-y-3">
-                  {getCompletedSessions(6).map(session => (
-                    <div key={session.id} className="bg-white rounded-xl p-4 border-2 border-green-200 hover:shadow-lg transition-all flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold text-gray-900">{session.title}</h4>
-                        <p className="text-sm text-gray-600">📅 {formatSessionDate(session.scheduledAt)} • 👨‍🏫 {session.instructor}</p>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          if(session.recordingUrl) {
-                            window.open(session.recordingUrl, '_blank')
-                          }
-                        }}
-                        className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-all text-sm"
-                      >
-                        ▶️ Watch
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* No sessions message */}
-            {getLiveSessions().length === 0 && getUpcomingSessions().length === 0 && getCompletedSessions().length === 0 && (
-              <div className="bg-indigo-50 rounded-xl p-8 border-2 border-indigo-200 text-center">
-                <h3 className="text-xl font-black text-gray-900 mb-2">📅 No Sessions Yet</h3>
-                <p className="text-gray-600">Check back soon for upcoming live classes and sessions!</p>
-              </div>
-            )}
-          </div>
-        )}
-        
         {activeTab === 'overview' && (
           <div>
             <div className="mb-8">
-              <h1 className="text-4xl font-black text-gray-900">Welcome Back, {user?.displayName || 'Student'}! 👋</h1>
+              <h1 className="text-4xl font-black text-gray-900">Welcome Back, {isAdmin ? 'Admin' : (user?.displayName?.trim() || 'Student')}! 👋</h1>
               <p className="mt-2 text-gray-600">Keep up the great work! You're on track for success.</p>
             </div>
 
@@ -456,35 +355,148 @@ export default function Dashboard(){
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                  <div className="bg-white rounded-xl p-6 border-2 border-indigo-100 shadow-md">
+                  {/* Total Hours Card */}
+                  <button
+                    onClick={() => setActiveTab('videos')}
+                    className="bg-white rounded-xl p-6 border-2 border-indigo-100 shadow-md hover:shadow-lg hover:border-indigo-300 transition-all transform hover:scale-105 text-left cursor-pointer"
+                  >
                     <p className="text-gray-600 font-semibold text-sm">Total Hours</p>
-                    <p className="text-3xl font-black text-indigo-600 mt-2">{stats?.totalHoursWatched.toFixed(1) || 0} hrs</p>
-                    <p className="text-xs text-gray-500 mt-2">↑ {stats?.videosWatched || 0} videos watched</p>
-                  </div>
-                  <div className="bg-white rounded-xl p-6 border-2 border-blue-100 shadow-md">
+                    <p className="text-3xl font-black text-indigo-600 mt-2">
+                      {displayStats?.totalHoursWatched > 0 ? displayStats.totalHoursWatched.toFixed(1) : '0.0'} hrs
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {displayStats?.videosWatched > 0 ? (
+                        <>↑ {displayStats.videosWatched} videos watched</>
+                      ) : (
+                        <>👆 Click to watch videos</>
+                      )}
+                    </p>
+                  </button>
+
+                  {/* Avg Score Card */}
+                  <button
+                    onClick={() => setActiveTab('tests')}
+                    className="bg-white rounded-xl p-6 border-2 border-blue-100 shadow-md hover:shadow-lg hover:border-blue-300 transition-all transform hover:scale-105 text-left cursor-pointer"
+                  >
                     <p className="text-gray-600 font-semibold text-sm">Avg Score</p>
-                    <p className="text-3xl font-black text-blue-600 mt-2">{stats?.averageTestScore || 0}%</p>
-                    <p className="text-xs text-gray-500 mt-2">{stats?.mockTestsCompleted || 0} tests taken</p>
-                  </div>
-                  <div className="bg-white rounded-xl p-6 border-2 border-purple-100 shadow-md">
+                    <p className="text-3xl font-black text-blue-600 mt-2">
+                      {displayStats?.averageTestScore > 0 ? displayStats.averageTestScore : '0'}%
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {displayStats?.mockTestsCompleted > 0 ? (
+                        <>{displayStats.mockTestsCompleted} tests taken</>
+                      ) : (
+                        <>👆 Click to take tests</>
+                      )}
+                    </p>
+                  </button>
+
+                  {/* Streak Card */}
+                  <button
+                    onClick={() => {
+                      alert('🔥 Study daily to build your streak!\n\nTips:\n• Watch at least 1 video daily\n• Complete mock tests regularly\n• Download study materials\n• Attend live sessions')
+                    }}
+                    className="bg-white rounded-xl p-6 border-2 border-purple-100 shadow-md hover:shadow-lg hover:border-purple-300 transition-all transform hover:scale-105 text-left cursor-pointer"
+                  >
                     <p className="text-gray-600 font-semibold text-sm">Streak</p>
-                    <p className="text-3xl font-black text-purple-600 mt-2">{stats?.currentStreak || 0} days</p>
-                    <p className="text-xs text-gray-500 mt-2">Keep it going!</p>
-                  </div>
-                  <div className="bg-white rounded-xl p-6 border-2 border-pink-100 shadow-md">
+                    <p className="text-3xl font-black text-purple-600 mt-2">
+                      {displayStats?.currentStreak > 0 ? displayStats.currentStreak : '0'} days
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {displayStats?.currentStreak > 0 ? 'Keep it going! 🔥' : '👆 Start your streak!'}
+                    </p>
+                  </button>
+
+                  {/* Rank Card */}
+                  <button
+                    onClick={() => {
+                      const rank = displayStats?.averageTestScore > 80 ? '#245' : displayStats?.averageTestScore > 60 ? '#1,245' : displayStats?.averageTestScore >= 0 && displayStats?.testsTaken > 0 ? '#5,678' : 'N/A'
+                      const percentile = displayStats?.averageTestScore > 80 ? 'Top 1%' : displayStats?.averageTestScore > 60 ? 'Top 3%' : displayStats?.testsTaken > 0 ? 'Top 15%' : 'No rank yet'
+                      alert(`🏆 Your Current Rank\n\nRank: ${rank}\nPercentile: ${percentile}\n\n${displayStats?.testsTaken === 0 ? '💡 Take mock tests to get ranked!' : displayStats?.averageTestScore === 0 ? '💪 Keep trying! Every attempt counts!' : '💪 Keep studying to climb higher!'}`)
+                    }}
+                    className="bg-white rounded-xl p-6 border-2 border-pink-100 shadow-md hover:shadow-lg hover:border-pink-300 transition-all transform hover:scale-105 text-left cursor-pointer"
+                  >
                     <p className="text-gray-600 font-semibold text-sm">Rank (Est.)</p>
-                    <p className="text-3xl font-black text-pink-600 mt-2">#1,245</p>
-                    <p className="text-xs text-gray-500 mt-2">Top 3% 🚀</p>
-                  </div>
+                    <p className="text-3xl font-black text-pink-600 mt-2">
+                      {displayStats?.averageTestScore > 80 ? '#245' : displayStats?.averageTestScore > 60 ? '#1,245' : displayStats?.averageTestScore >= 0 && displayStats?.testsTaken > 0 ? '#5,678' : '--'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {displayStats?.averageTestScore > 80 ? 'Top 1% 🚀' : displayStats?.averageTestScore > 60 ? 'Top 3% 🚀' : displayStats?.testsTaken > 0 ? 'Top 15% 📈' : '👆 Start climbing!'}
+                    </p>
+                  </button>
                 </div>
+
+                {/* Demo Data Toggle - Show when no activity */}
+                {(!stats?.videosWatched || stats.videosWatched === 0) && (!stats?.mockTestsCompleted || stats.mockTestsCompleted === 0) && (
+                  <div className="mb-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">💡</span>
+                      <div>
+                        <p className="font-bold text-gray-900">New here? See how your dashboard will look</p>
+                        <p className="text-sm text-gray-600">Toggle demo data to preview stats with sample numbers</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowDemoData(!showDemoData)}
+                      className={`px-6 py-3 rounded-lg font-bold transition-all transform hover:scale-105 ${
+                        showDemoData 
+                          ? 'bg-red-500 text-white hover:bg-red-600' 
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      }`}
+                    >
+                      {showDemoData ? '🔴 Hide Demo' : '▶️ Show Demo'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Getting Started Guide - Show when no activity and no demo */}
+                {!showDemoData && (!stats?.videosWatched || stats.videosWatched === 0) && (!stats?.mockTestsCompleted || stats.mockTestsCompleted === 0) && (
+                  <div className="mb-8 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-6 shadow-lg text-white">
+                    <div className="flex items-start gap-4">
+                      <div className="text-4xl">🎯</div>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-black mb-2">Welcome to CSK! Let's Get Started 🚀</h3>
+                        <p className="text-indigo-100 mb-4">
+                          You haven't started learning yet. Here's how to begin your journey:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <button
+                            onClick={() => setActiveTab('videos')}
+                            className="bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg p-4 text-left transition-all"
+                          >
+                            <div className="text-2xl mb-2">🔴</div>
+                            <p className="font-bold text-sm">1. Join Live Sessions</p>
+                            <p className="text-xs text-indigo-100 mt-1">Connect with instructors</p>
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('materials')}
+                            className="bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg p-4 text-left transition-all"
+                          >
+                            <div className="text-2xl mb-2">📚</div>
+                            <p className="font-bold text-sm">2. Download Notes</p>
+                            <p className="text-xs text-indigo-100 mt-1">Get study materials</p>
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('tests')}
+                            className="bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg p-4 text-left transition-all"
+                          >
+                            <div className="text-2xl mb-2">✅</div>
+                            <p className="font-bold text-sm">3. Take Tests</p>
+                            <p className="text-xs text-indigo-100 mt-1">Practice mock tests</p>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200">
                     <h3 className="text-lg font-black text-gray-900 mb-4">Recent Activity</h3>
                     <div className="space-y-4">
-                      {videosWatched.slice(0, 3).length > 0 ? (
+                      {displayVideos.slice(0, 3).length > 0 ? (
                         <>
-                          {videosWatched.slice(0, 3).map((v: any) => (
+                          {displayVideos.slice(0, 3).map((v: any) => (
                             <div key={v.id} className="flex gap-3 pb-3 border-b border-gray-200">
                               <div className="text-2xl">▶️</div>
                               <div>
@@ -493,7 +505,7 @@ export default function Dashboard(){
                               </div>
                             </div>
                           ))}
-                          {testScores.slice(0, 1).map((t: any) => (
+                          {displayTestScores.slice(0, 1).map((t: any) => (
                             <div key={t.id} className="flex gap-3 pb-3 border-b border-gray-200">
                               <div className="text-2xl">✅</div>
                               <div>
@@ -519,12 +531,97 @@ export default function Dashboard(){
                       <p className="text-indigo-100 text-sm">👨‍🏫 Hosted by Rahul</p>
                     </div>
                     <button 
-                      onClick={() => alert('📢 Reminder set! You will be notified at 5:30 PM before the session starts.')}
+                      onClick={async () => {
+                        if (!('Notification' in window)) {
+                          alert('Your browser does not support notifications.')
+                          return
+                        }
+                        const permission = await Notification.requestPermission()
+                        if (permission === 'granted') {
+                          // Schedule reminder 30 min before — 6:00 PM tomorrow = next occurrence
+                          const now = new Date()
+                          const session = new Date()
+                          session.setDate(now.getDate() + 1)
+                          session.setHours(17, 30, 0, 0) // 5:30 PM reminder for 6 PM session
+                          const delay = session.getTime() - now.getTime()
+                          if (delay > 0) {
+                            setTimeout(() => {
+                              new Notification('📢 CSK Live Session in 30 minutes!', {
+                                body: 'Modern Indian History - Advanced starts at 6:00 PM. Get ready!',
+                                icon: '/images/csk-logo.png'
+                              })
+                            }, delay)
+                            alert(`✅ Reminder set!\nYou'll get a notification at 5:30 PM tomorrow before the session.`)
+                          } else {
+                            new Notification('📢 CSK Reminder', { body: 'Your session is starting soon!' })
+                            alert('✅ Notification sent!')
+                          }
+                        } else {
+                          alert('❌ Notification permission denied. Please allow notifications in your browser settings.')
+                        }
+                      }}
                       className="w-full px-4 py-3 bg-yellow-400 text-indigo-900 font-bold rounded-lg hover:bg-yellow-300 transition-all transform hover:scale-105"
                     >
                       Set Reminder
                     </button>
                   </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="mt-8 bg-white rounded-xl p-6 shadow-lg border border-gray-200">
+                  <h3 className="text-xl font-black text-gray-900 mb-4">⚡ Quick Actions</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button
+                      onClick={() => setActiveTab('videos')}
+                      className="p-4 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all transform hover:scale-105 text-left"
+                    >
+                      <div className="text-3xl mb-2">🔴</div>
+                      <p className="font-bold">Join Live Sessions</p>
+                      <p className="text-sm text-purple-100 mt-1">Connect with instructors</p>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('materials')}
+                      className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all transform hover:scale-105 text-left"
+                    >
+                      <div className="text-3xl mb-2">📚</div>
+                      <p className="font-bold">Study Materials</p>
+                      <p className="text-sm text-blue-100 mt-1">Download resources</p>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('tests')}
+                      className="p-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg transition-all transform hover:scale-105 text-left"
+                    >
+                      <div className="text-3xl mb-2">✅</div>
+                      <p className="font-bold">Take Mock Test</p>
+                      <p className="text-sm text-green-100 mt-1">Practice questions</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress Chart Section */}
+                <div className="mt-8 bg-white rounded-xl p-6 shadow-lg border border-gray-200">
+                  <h3 className="text-xl font-black text-gray-900 mb-4">📊 Your Progress This Week</h3>
+                  <div className="grid grid-cols-7 gap-2">
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
+                      <div key={day} className="text-center">
+                        <p className="text-xs text-gray-500 mb-2">{day}</p>
+                        <div
+                          className={`h-20 rounded-lg ${index <= 4 ? 'bg-indigo-500' : 'bg-gray-200'} flex items-end justify-center p-2`}
+                        >
+                          <span className="text-xs text-white font-bold">
+                            {index <= 4 ? `${Math.floor(Math.random() * 3) + 1}h` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-sm text-gray-600 mt-4 text-center">
+                    {showDemoData && (!stats?.totalHoursWatched || stats.totalHoursWatched === 0) ? (
+                      <>This is demo data. Start learning to see your real progress! 🎯</>
+                    ) : (
+                      <>You've studied for {displayStats?.totalHoursWatched.toFixed(1) || 0} hours this week! 🎯</>
+                    )}
+                  </p>
                 </div>
               </>
             )}
@@ -533,57 +630,79 @@ export default function Dashboard(){
 
         {activeTab === 'videos' && (
           <div>
-            <h2 className="text-3xl font-black text-gray-900 mb-6">Video Lectures</h2>
+            <h2 className="text-3xl font-black text-gray-900 mb-6">🔴 Live Sessions</h2>
+
+            {/* Google Meet Integration - Top Section */}
+            <div className="mb-8 bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-6 shadow-lg text-white">
+              <div className="flex items-start gap-4">
+                <div className="text-5xl">👥</div>
+                <div className="flex-1">
+                  <h3 className="text-2xl font-black mb-2">Join Live Video Session</h3>
+                  <p className="text-blue-100 mb-4">
+                    Connect with instructors and fellow students in real-time via Google Meet
+                  </p>
+                  <div className="flex gap-3 flex-wrap">
+                    <button
+                      onClick={() => window.open('https://meet.google.com/new', '_blank')}
+                      className="px-6 py-3 bg-white text-blue-600 font-bold rounded-lg hover:bg-blue-50 transition-all transform hover:scale-105"
+                    >
+                      👥 Create Google Meet
+                    </button>
+                    <button
+                      onClick={() => {
+                        const meetCode = prompt('Enter Google Meet code or link:')
+                        if (meetCode) {
+                          if (meetCode.includes('meet.google.com')) {
+                            window.open(meetCode, '_blank')
+                          } else {
+                            window.open(`https://meet.google.com/${meetCode}`, '_blank')
+                          }
+                        }
+                      }}
+                      className="px-6 py-3 bg-blue-700 text-white font-bold rounded-lg hover:bg-blue-800 transition-all"
+                    >
+                      🔗 Join with Code
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {loading ? (
               <div className="flex justify-center items-center h-64">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white rounded-xl overflow-hidden shadow-lg">
-                  <div className="bg-gradient-to-br from-gray-800 to-gray-900 aspect-video flex flex-col items-center justify-center gap-4 p-6">
-                    <div className="text-5xl">👥</div>
-                    <p className="text-white font-bold text-center">Google Meet Live Session</p>
-                    <p className="text-gray-300 text-sm">Modern Indian History - Basics</p>
-                    <a href="https://meet.google.com/new" target="_blank" rel="noopener noreferrer" className="px-6 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition-all">
-                      Join Google Meet
-                    </a>
-                  </div>
-                  <div className="p-6">
-                    <h3 className="text-2xl font-black text-gray-900">Modern Indian History - Basics</h3>
-                    <p className="mt-2 text-gray-600">Comprehensive overview of modern Indian history from 1757 to independence. Learn key events, personalities, and their impact on the current system.</p>
-                    <div className="mt-4 space-y-3">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <span>📅 Scheduled for Today at 6:00 PM</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <span>👨‍🏫 Hosted by Rahul</span>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between">
-                      <span className="text-sm text-gray-500">45 min | Interactive Session</span>
-                      <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Take Notes</button>
-                    </div>
-                  </div>
-                </div>
+              <div className="space-y-8">
 
-                <div className="space-y-4">
-                  <h3 className="font-black text-gray-900">Videos Watched ({videosWatched.length})</h3>
+                {/* Videos Watched History */}
+                <div className="bg-white rounded-xl p-6 shadow-lg border-2 border-gray-200">
+                  <h3 className="text-xl font-black text-gray-900 mb-4">✅ Recently Watched ({videosWatched.length})</h3>
                   {videosWatched.length > 0 ? (
-                    videosWatched.map(v => (
-                      <div key={v.id} className="p-4 rounded-lg bg-green-50 border-2 border-green-200">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="font-semibold text-gray-900 text-sm">{v.videoTitle || 'Video Lecture'}</p>
-                            <p className="text-xs text-gray-500 mt-1">{v.duration || 'Duration unknown'} ✓</p>
+                    <div className="space-y-3">
+                      {videosWatched.map(v => (
+                        <div key={v.id} className="p-4 rounded-lg bg-green-50 border-2 border-green-200 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">✅</span>
+                            <div>
+                              <p className="font-bold text-gray-900 text-sm">{v.videoTitle || 'Video Lecture'}</p>
+                              <p className="text-xs text-gray-500">{v.duration || 'Duration unknown'} • Completed</p>
+                            </div>
                           </div>
-                          <span className="text-lg">✅</span>
+                          <button
+                            onClick={() => window.open('https://meet.google.com/new', '_blank')}
+                            className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all text-xs"
+                          >
+                            👥 Discuss
+                          </button>
                         </div>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   ) : (
-                    <div className="p-4 rounded-lg bg-gray-50 border-2 border-gray-200 text-center">
-                      <p className="text-sm text-gray-500">No videos watched yet</p>
+                    <div className="text-center py-8">
+                      <div className="text-5xl mb-3">📹</div>
+                      <p className="text-gray-500 mb-4">No videos watched yet</p>
+                      <p className="text-sm text-gray-400">Start watching lectures above to build your learning history</p>
                     </div>
                   )}
                 </div>
@@ -594,20 +713,75 @@ export default function Dashboard(){
 
         {activeTab === 'materials' && (
           <div>
-            <FolderView category="study-material" />
+            <FolderView category="study-material" allowedExams={enrolledCourses} />
           </div>
         )}
 
         {activeTab === 'lectures' && (
           <div>
-            <FolderView category="recorded-lectures" />
+            <FolderView category="recorded-lectures" allowedExams={enrolledCourses} />
           </div>
         )}
 
         {activeTab === 'tests' && (
           <div>
-            <FolderView category="mock-tests" />
+            <FolderView
+              category="mock-tests"
+              allowedExams={enrolledCourses}
+              onStartTest={(testId, testName) => {
+                setActiveTestId(testId)
+              }}
+            />
           </div>
+        )}
+
+        {/* Mock Test Engine */}
+        {activeTestId && (
+          <MockTestEngine
+            testId={activeTestId}
+            testName={activeTestId.replace(/-/g, ' ').toUpperCase()}
+            totalQuestions={10}
+            timeLimit={30}
+            passingScore={40}
+            questions={getSampleQuestions(activeTestId)}
+            userId={user?.uid || 'anonymous'}
+            onSubmit={async (score, correctAnswers) => {
+              // Save test results immediately when test is submitted
+              if (user?.uid) {
+                try {
+                  console.log('💾 Saving test results:', { score, correctAnswers })
+                  await logMockTestCompletion(
+                    user.uid,
+                    activeTestId,
+                    activeTestId.replace(/-/g, ' ').toUpperCase(),
+                    score,
+                    10,
+                    correctAnswers,
+                    30
+                  )
+                  console.log('✅ Test results saved to Firestore')
+                } catch (error) {
+                  console.error('❌ Failed to save test results:', error)
+                }
+              }
+            }}
+            onComplete={async (score, answers) => {
+              // Save test results locally
+              setTestResults({ score, answers, testId: activeTestId })
+
+              // Refresh stats after saving
+              if (user?.uid) {
+                try {
+                  const updatedStats = await getStudentStats(user.uid)
+                  setStats(updatedStats)
+                  console.log('✅ Stats refreshed')
+                } catch (error) {
+                  console.error('❌ Failed to refresh stats:', error)
+                }
+              }
+            }}
+            onClose={() => setActiveTestId(null)}
+          />
         )}
 
         {/* Video Player Modal */}
@@ -789,4 +963,5 @@ function getSampleQuestions(testId: string) {
     return baseQuestions
   }
 }
+
 

@@ -80,6 +80,20 @@ export interface StudentProgress extends DocumentData {
 }
 
 // ============================================
+// USER ENROLLMENT & COURSE ACCESS TYPES
+// ============================================
+
+export interface UserEnrollment extends DocumentData {
+  id?: string;
+  userId: string;
+  email: string;
+  enrolledCourses: string[]; // Array of course types: 'UPSC', 'TNPSC', 'BOTH'
+  paymentStatus: 'paid' | 'pending' | 'failed';
+  enrolledAt: any;
+  expiresAt?: any;
+}
+
+// ============================================
 // COURSES COLLECTION FUNCTIONS
 // ============================================
 
@@ -453,6 +467,39 @@ export const getMockTestScoresByUser = async (userId: string): Promise<MockTestS
 };
 
 /**
+ * GET ALL SCORES FOR A SPECIFIC TEST (for ranking)
+ * @param {string} testId - Test ID
+ * @returns {Promise<MockTestScore[]>} Array of all scores for this test
+ */
+export const getAllScoresForTest = async (testId: string): Promise<MockTestScore[]> => {
+  try {
+    console.log('🔍 getAllScoresForTest called with testId:', testId)
+    const testScoresRef = collection(db, 'mockTestScores');
+    // Only use where() — no orderBy — to avoid needing a composite index
+    const q = query(testScoresRef, where('testId', '==', testId));
+
+    console.log('📡 Executing Firestore query...')
+    const snapshot = await getDocs(q);
+    console.log('📦 Query completed. Documents found:', snapshot.size)
+
+    const scores: MockTestScore[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data()
+      scores.push({ id: doc.id, ...data } as MockTestScore);
+    });
+
+    // Sort in JS — no Firestore composite index needed
+    scores.sort((a, b) => b.score - a.score);
+
+    console.log('✅ Fetched all scores for test:', scores.length, 'scores:', scores.map(s => s.score))
+    return scores;
+  } catch (error: any) {
+    console.error('❌ Error fetching all test scores:', error.message, error)
+    return [];
+  }
+};
+
+/**
  * UPDATE STUDENT PROGRESS
  * @param {string} userId - User ID
  * @param {Partial<StudentProgress>} data - Progress data to update
@@ -816,3 +863,107 @@ export const removeAdminRole = async (userId: string) => {
   }
 };
 
+/**
+ * Enroll user in a course (UPSC or TNPSC)
+ * @param userId - Firebase user ID
+ * @param email - User email
+ * @param courseType - 'UPSC' | 'TNPSC' | 'BOTH'
+ */
+export const enrollUserInCourse = async (
+  userId: string,
+  email: string,
+  courseType: 'UPSC' | 'TNPSC' | 'BOTH'
+): Promise<void> => {
+  try {
+    const enrollmentRef = doc(db, 'enrollments', userId);
+    const enrollmentSnap = await getDoc(enrollmentRef);
+
+    if (enrollmentSnap.exists()) {
+      // Update existing enrollment
+      const currentData = enrollmentSnap.data() as UserEnrollment;
+      const enrolledCourses = currentData.enrolledCourses || [];
+
+      if (courseType === 'BOTH') {
+        await updateDoc(enrollmentRef, {
+          enrolledCourses: ['UPSC', 'TNPSC'],
+          updatedAt: new Date()
+        });
+      } else if (!enrolledCourses.includes(courseType)) {
+        enrolledCourses.push(courseType);
+        await updateDoc(enrollmentRef, {
+          enrolledCourses,
+          updatedAt: new Date()
+        });
+      }
+    } else {
+      // Create new enrollment
+      await setDoc(enrollmentRef, {
+        userId,
+        email,
+        enrolledCourses: courseType === 'BOTH' ? ['UPSC', 'TNPSC'] : [courseType],
+        paymentStatus: 'paid',
+        enrolledAt: new Date(),
+        expiresAt: null // Set to null for lifetime access, or add expiry date
+      });
+    }
+    console.log(`✅ User enrolled in ${courseType}`);
+  } catch (error: any) {
+    console.error('❌ Error enrolling user:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Get user's enrolled courses
+ * @param userId - Firebase user ID
+ * @returns Array of enrolled course types
+ */
+export const getUserEnrolledCourses = async (userId: string): Promise<string[]> => {
+  try {
+    const enrollmentRef = doc(db, 'enrollments', userId);
+    const enrollmentSnap = await getDoc(enrollmentRef);
+
+    if (enrollmentSnap.exists()) {
+      const data = enrollmentSnap.data() as UserEnrollment;
+      return data.enrolledCourses || [];
+    }
+    return [];
+  } catch (error: any) {
+    console.error('❌ Error fetching enrolled courses:', error.message);
+    return [];
+  }
+};
+
+/**
+ * Check if user has access to a specific course
+ * @param userId - Firebase user ID
+ * @param courseType - 'UPSC' | 'TNPSC'
+ * @returns true if user has access, false otherwise
+ */
+export const hasUserAccessToCourse = async (
+  userId: string,
+  courseType: 'UPSC' | 'TNPSC'
+): Promise<boolean> => {
+  try {
+    const enrolledCourses = await getUserEnrolledCourses(userId);
+    return enrolledCourses.includes(courseType);
+  } catch (error: any) {
+    console.error('❌ Error checking course access:', error.message);
+    return false;
+  }
+};
+
+/**
+ * Remove user enrollment
+ * @param userId - Firebase user ID
+ */
+export const removeUserEnrollment = async (userId: string): Promise<void> => {
+  try {
+    const enrollmentRef = doc(db, 'enrollments', userId);
+    await deleteDoc(enrollmentRef);
+    console.log('✅ User enrollment removed');
+  } catch (error: any) {
+    console.error('❌ Error removing enrollment:', error.message);
+    throw error;
+  }
+};

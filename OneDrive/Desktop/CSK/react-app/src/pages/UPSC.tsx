@@ -1,9 +1,74 @@
 import React from 'react'
 import CourseCard from '../components/CourseCard'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext.tsx'
 
 export default function UPSC(){
   const navigate = useNavigate()
+  const { user, enrolledCourses, loading } = useAuth()
+
+  // Instant check — no Firestore call needed
+  const hasAccess = !user || enrolledCourses.length === 0 || enrolledCourses.includes('UPSC') || enrolledCourses.includes('BOTH')
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    )
+  }
+
+  if (!hasAccess && user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+        {/* Back Button */}
+        <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
+          <div className="max-w-5xl mx-auto px-6 py-3 flex items-center">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all font-semibold"
+            >
+              ← Back
+            </button>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto px-6 py-16">
+          <div className="bg-white rounded-2xl shadow-xl p-12 text-center">
+            <div className="text-6xl mb-6">🔒</div>
+            <h1 className="text-3xl font-black text-gray-900 mb-4">Access Restricted</h1>
+            <p className="text-lg text-gray-600 mb-2">
+              You don't have access to UPSC courses.
+            </p>
+            <p className="text-gray-500 mb-8">
+              It looks like you're enrolled in a different course program.
+            </p>
+            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 mb-8">
+              <p className="text-sm text-gray-700">
+                <strong>📌 Note:</strong> Users enrolled in TNPSC courses have access only to TNPSC content, and vice versa.
+                To access both programs, you'll need to purchase the combined package.
+              </p>
+            </div>
+            <div className="flex gap-4 justify-center flex-wrap">
+              <button
+                onClick={() => navigate('/contact')}
+                className="px-8 py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all transform hover:scale-105"
+              >
+                Contact Us for Access
+              </button>
+              <button
+                onClick={() => navigate('/')}
+                className="px-8 py-4 bg-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-300 transition-all"
+              >
+                Go to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const programs = [
     {
       title: "UPSC Prelims Focused",
@@ -62,12 +127,6 @@ export default function UPSC(){
           </p>
           <div className="mt-8 flex flex-wrap gap-4">
             <button 
-              onClick={() => navigate('/courses')}
-              className="px-8 py-4 bg-yellow-400 text-indigo-900 font-black text-lg rounded-lg hover:bg-yellow-300 transition-all duration-300 transform hover:scale-105 shadow-lg"
-            >
-              Explore Programs
-            </button>
-            <button 
               onClick={() => navigate('/contact')}
               className="px-8 py-4 bg-white/20 backdrop-blur-md text-white font-bold text-lg rounded-lg border-2 border-white hover:bg-white/30 transition-all duration-300"
             >
@@ -77,27 +136,7 @@ export default function UPSC(){
         </div>
       </div>
 
-      {/* Stats Section */}
-      <div className="max-w-6xl mx-auto px-6 py-12">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-6 border border-indigo-200 text-center">
-            <div className="text-4xl font-black text-indigo-600">8000+</div>
-            <p className="mt-2 text-gray-700 font-semibold">Students Prepared</p>
-          </div>
-          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-200 text-center">
-            <div className="text-4xl font-black text-blue-600">450+</div>
-            <p className="mt-2 text-gray-700 font-semibold">Selections Made</p>
-          </div>
-          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200 text-center">
-            <div className="text-4xl font-black text-purple-600">300+</div>
-            <p className="mt-2 text-gray-700 font-semibold">Hours Content</p>
-          </div>
-          <div className="bg-gradient-to-br from-pink-50 to-red-50 rounded-xl p-6 border border-pink-200 text-center">
-            <div className="text-4xl font-black text-pink-600">15+</div>
-            <p className="mt-2 text-gray-700 font-semibold">Years Experience</p>
-          </div>
-        </div>
-      </div>
+
 
       {/* Highlights Section */}
       <div className="max-w-6xl mx-auto px-6 py-12">

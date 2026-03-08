@@ -1,22 +1,26 @@
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { User } from 'firebase/auth';
 import { onAuthChange } from '../firebase/auth.ts';
+import { getUserEnrolledCourses } from '../firebase/firestore.ts';
 
-// Create context with proper typing
+// ============================================================
+// 🔐 HARDCODED ADMIN EMAIL — ONLY this email is ever admin
+// No Firestore lookup needed — email check is the single source of truth
+// ============================================================
+const ADMIN_EMAILS = ['civilserviceskendra@gmail.com', 'admin@csk.com'];
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
   setError: (error: string | null) => void;
   isAuthenticated: boolean;
+  enrolledCourses: string[];
+  isAdmin: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * AUTH PROVIDER - Manages global authentication state
- * Wrap your entire app with this to access user data anywhere
- */
 interface AuthProviderProps {
   children: ReactNode;
 }
@@ -25,15 +29,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [enrolledCourses, setEnrolledCourses] = useState<string[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // Listen for auth state changes when component mounts
   useEffect(() => {
-    const unsubscribe = onAuthChange((currentUser) => {
+    const unsubscribe = onAuthChange(async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        try {
+          const courses = await getUserEnrolledCourses(currentUser.uid);
+          setEnrolledCourses(courses);
+        } catch {
+          setEnrolledCourses([]);
+        }
+        // ✅ isAdmin is ONLY true if email exactly matches hardcoded admin email
+        const adminCheck = ADMIN_EMAILS.includes(currentUser.email?.toLowerCase().trim() || '');
+        setIsAdmin(adminCheck);
+      } else {
+        setEnrolledCourses([]);
+        setIsAdmin(false);
+      }
       setLoading(false);
     });
-
-    // Cleanup subscription on unmount
     return unsubscribe;
   }, []);
 
@@ -42,7 +59,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     error,
     setError,
-    isAuthenticated: !!user
+    isAuthenticated: !!user,
+    enrolledCourses,
+    isAdmin,
   };
 
   return (
@@ -52,10 +71,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   );
 };
 
-/**
- * CUSTOM HOOK - Use this hook in any component to access auth state
- * Usage: const { user, loading, isAuthenticated } = useAuth();
- */
 export const useAuth = (): AuthContextType => {
   const context = React.useContext(AuthContext);
   if (!context) {

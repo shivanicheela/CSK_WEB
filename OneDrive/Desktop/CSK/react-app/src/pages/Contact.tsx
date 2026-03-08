@@ -18,10 +18,10 @@ export default function Contact(){
   }
 
   const contactMethods = [
-    { emoji: '📞', title: 'Phone', value: '+91 44 4123 4123', desc: 'Mon-Fri, 9 AM - 9 PM IST' },
-    { emoji: '✉️', title: 'Email', value: 'info@csk.com', desc: 'We reply within 24 hours' },
-    { emoji: '📍', title: 'Address', value: 'Chennai, Tamil Nadu', desc: 'Open 7 days a week' },
-    { emoji: '💬', title: 'Live Chat', value: 'Available Now', desc: 'Click the chat widget' }
+    { emoji: '📞', title: 'Phone', value: '8050713535', desc: 'Available for queries' },
+    { emoji: '✉️', title: 'Email', value: 'civilserviceskendra@gmail.com', desc: 'We reply within 24 hours' },
+    { emoji: '🌐', title: 'Online Platform', value: '100% Online Based', desc: 'Learn from anywhere, anytime' },
+    { emoji: '💬', title: 'Live Chat', value: 'Available Now', desc: 'Quick support via chat' }
   ]
 
   return (
@@ -188,16 +188,11 @@ export default function Contact(){
           </div>
         </div>
 
-        {/* Map Section */}
-        <div className="mt-16 bg-gray-200 rounded-xl overflow-hidden h-80">
-          <iframe 
-            width="100%" 
-            height="100%" 
-            style={{border: 0}} 
-            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3887.8779316217654!2d80.26422111111112!3d13.047120199999997!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3a526a93a6f6f6f7%3A0x1234567890abcdef!2sChennai%2C%20Tamil%20Nadu!5e0!3m2!1sen!2sin!4v1234567890"
-            allowFullScreen={true}
-            loading="lazy"
-          ></iframe>
+        {/* Online Platform Info */}
+        <div className="mt-16 bg-gradient-to-r from-indigo-600 to-purple-700 rounded-xl p-8 text-white text-center">
+          <h3 className="text-3xl font-black mb-4">🌐 100% Online Learning Platform</h3>
+          <p className="text-xl text-indigo-100 mb-4">Access quality education from anywhere, anytime!</p>
+          <p className="text-indigo-100">No physical address - we're a fully online platform dedicated to providing you with the best civil services preparation resources.</p>
         </div>
       </div>
     </div>

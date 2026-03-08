@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { uploadVideo, uploadPDF, uploadThumbnail, validateFile } from '../firebase/storage.ts';
 import { addCourse } from '../firebase/firestore.ts';
+import { FOLDER_STRUCTURE } from '../utils/folderStructure.ts';
 
 export default function AdminCourseUpload() {
   const [formData, setFormData] = useState({
@@ -242,20 +243,28 @@ export default function AdminCourseUpload() {
               />
             </div>
 
-            {/* Category */}
+            {/* Category / Folder */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Category</label>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Folder (Exam › Level › Subject)</label>
               <select
                 name="category"
                 value={formData.category}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-600 focus:outline-none"
               >
-                <option value="">Select Category</option>
-                <option value="UPSC">UPSC</option>
-                <option value="TNPSC">TNPSC</option>
-                <option value="General Knowledge">General Knowledge</option>
-                <option value="Other">Other</option>
+                <option value="">Select Folder</option>
+                {Object.entries(FOLDER_STRUCTURE).map(([exam, levels]) =>
+                  Object.entries(levels).map(([level, subjects]) =>
+                    (subjects as string[]).map((subject) => {
+                      const val = `${exam}-${level}-${subject}`
+                      return (
+                        <option key={val} value={val}>
+                          {exam} › {level} › {subject}
+                        </option>
+                      )
+                    })
+                  )
+                )}
               </select>
             </div>
 

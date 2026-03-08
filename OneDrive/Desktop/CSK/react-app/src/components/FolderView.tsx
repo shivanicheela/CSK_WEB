@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.tsx'
 import { isUserAdmin } from '../firebase/firestore.ts'
-import { RESOURCE_CATEGORIES, ExamType, LevelType, getSubjects } from '../utils/folderStructure'
+import { RESOURCE_CATEGORIES, ExamType, LevelType, MockTestType, getSubjects, getMockTestItems } from '../utils/folderStructure'
 
 interface FolderItem {
   name: string
@@ -11,20 +11,45 @@ interface FolderItem {
   children?: FolderItem[]
 }
 
-export default function FolderView({ category }: { category: 'study-material' | 'recorded-lectures' | 'mock-tests' }) {
-  const [selectedExam, setSelectedExam] = useState<ExamType>('UPSC')
+export default function FolderView({
+  category,
+  onStartTest,
+  allowedExams = []
+}: {
+  category: 'study-material' | 'recorded-lectures' | 'mock-tests'
+  onStartTest?: (testId: string, testName: string) => void
+  allowedExams?: string[]
+}) {
+  // Default to the first allowed exam, or UPSC if no restriction
+  const defaultExam: ExamType =
+    allowedExams.length > 0 && !allowedExams.includes('BOTH')
+      ? (allowedExams[0] as ExamType)
+      : 'UPSC'
+
+  const [selectedExam, setSelectedExam] = useState<ExamType>(defaultExam)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [checkedFolders, setCheckedFolders] = useState<Set<string>>(new Set())
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
 
   const categoryInfo = RESOURCE_CATEGORIES.find(c => c.id === category)
 
   const selectedLabels = useMemo(() => {
     const selected: string[] = []
     checkedFolders.forEach((id) => {
+      // Handle mock test folders
+      if (id.includes('-full-length')) {
+        selected.push(`${selectedExam} - Full Length Mock Test`)
+        return
+      }
+      if (id.includes('-subject-specific')) {
+        selected.push(`${selectedExam} - Subject Specific Mock Test`)
+        return
+      }
+
+      // Handle regular prelims/mains folders
       if (id.includes('-prelims')) {
         selected.push(`${selectedExam} - Prelims`)
         return
@@ -34,18 +59,43 @@ export default function FolderView({ category }: { category: 'study-material' | 
         return
       }
 
-      const [levelPrefix, idxRaw] = id.split('-').slice(-2)
-      const level = levelPrefix === 'prelims' ? 'Prelims' : levelPrefix === 'mains' ? 'Mains' : null
-      const idx = Number(idxRaw)
-      if (!level || Number.isNaN(idx)) return
+      // Handle individual items
+      if (category === 'mock-tests') {
+        // Mock test items
+        if (id.includes('full-length')) {
+          const parts = id.split('-')
+          const idx = Number(parts[parts.length - 1])
+          if (!Number.isNaN(idx)) {
+            const test = getMockTestItems(selectedExam, 'Full Length Mock Test')[idx]
+            if (test) {
+              selected.push(`${selectedExam} - ${test}`)
+            }
+          }
+        } else if (id.includes('subject-specific')) {
+          const parts = id.split('-')
+          const idx = Number(parts[parts.length - 1])
+          if (!Number.isNaN(idx)) {
+            const test = getMockTestItems(selectedExam, 'Subject Specific Mock Test')[idx]
+            if (test) {
+              selected.push(`${selectedExam} - ${test}`)
+            }
+          }
+        }
+      } else {
+        // Regular subjects
+        const [levelPrefix, idxRaw] = id.split('-').slice(-2)
+        const level = levelPrefix === 'prelims' ? 'Prelims' : levelPrefix === 'mains' ? 'Mains' : null
+        const idx = Number(idxRaw)
+        if (!level || Number.isNaN(idx)) return
 
-      const subject = getSubjects(selectedExam, level as LevelType)[idx]
-      if (subject) {
-        selected.push(`${selectedExam} - ${level} - ${subject}`)
+        const subject = getSubjects(selectedExam, level as LevelType)[idx]
+        if (subject) {
+          selected.push(`${selectedExam} - ${level} - ${subject}`)
+        }
       }
     })
     return selected
-  }, [checkedFolders, selectedExam])
+  }, [checkedFolders, selectedExam, category])
 
   const selectedCount = checkedFolders.size
 
@@ -131,12 +181,12 @@ export default function FolderView({ category }: { category: 'study-material' | 
 
   const renderSubjects = (exam: ExamType, level: LevelType, levelId: string) => {
     const subjects = getSubjects(exam, level)
-    const isExpanded = expandedFolders.has(levelId)
+    const isLevelExpanded = expandedFolders.has(levelId)
 
     return (
       <div key={levelId} className="mb-3">
-        {/* Level Folder */}
-        <div 
+        {/* Level Folder (Prelims / Mains) */}
+        <div
           onClick={() => toggleFolder(levelId)}
           className="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer transition-all"
         >
@@ -147,29 +197,125 @@ export default function FolderView({ category }: { category: 'study-material' | 
             onClick={(e) => e.stopPropagation()}
             className="w-5 h-5 cursor-pointer"
           />
-          <span className="text-2xl">{isExpanded ? '📂' : '📁'}</span>
+          <span className="text-2xl">{isLevelExpanded ? '📂' : '📁'}</span>
           <span className="font-bold text-gray-700 flex-1">{level}</span>
           <span className="text-sm text-gray-500">{subjects.length} subjects</span>
+          <span className="text-gray-400 text-sm">{isLevelExpanded ? '▲' : '▼'}</span>
         </div>
 
-        {/* Subjects List */}
-        {isExpanded && (
+        {/* Subject Folders inside Level */}
+        {isLevelExpanded && (
           <div className="mt-2 ml-6 space-y-2 border-l-2 border-indigo-300 pl-4">
             {subjects.map((subject, idx) => {
               const subjectId = `${levelId}-${idx}`
+              const isSubjectExpanded = expandedFolders.has(subjectId)
+              return (
+                <div key={subjectId}>
+                  {/* Subject Folder Row */}
+                  <div
+                    onClick={() => toggleFolder(subjectId)}
+                    className="flex items-center gap-3 p-2 bg-indigo-50 rounded-lg border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100 transition-all cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checkedFolders.has(subjectId)}
+                      onChange={() => toggleCheck(subjectId)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                    <span className="text-lg">{isSubjectExpanded ? '📂' : '📁'}</span>
+                    <span className="text-gray-700 font-semibold flex-1">{subject}</span>
+                    <span className="text-xs text-indigo-500 font-medium hidden sm:inline">
+                      {exam} › {level}
+                    </span>
+                    {/* Upload button visible directly on folder row for admins */}
+                    {category !== 'mock-tests' && isAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const route = category === 'recorded-lectures' ? '/upload-video' : '/upload-course'
+                          navigate(route, { state: { exam, level, subject } })
+                        }}
+                        className="px-3 py-1 bg-green-600 text-white text-xs font-bold rounded hover:bg-green-700 transition-all"
+                      >
+                        + Upload
+                      </button>
+                    )}
+                    <span className="text-gray-400 text-xs">{isSubjectExpanded ? '▲' : '▼'}</span>
+                  </div>
+
+                  {/* Inside Subject Folder — file list */}
+                  {isSubjectExpanded && (
+                    <div className="ml-6 mt-1 mb-2 border-l-2 border-indigo-200 pl-4 space-y-1">
+                      <div className="flex items-center gap-2 p-2 bg-white rounded border border-dashed border-indigo-300 text-sm text-gray-500">
+                        <span>📄</span>
+                        <span className="flex-1 italic">No files uploaded yet</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderMockTests = (exam: ExamType, testType: MockTestType, testTypeId: string) => {
+    const tests = getMockTestItems(exam, testType)
+    const isExpanded = expandedFolders.has(testTypeId)
+
+    return (
+      <div key={testTypeId} className="mb-3">
+        {/* Test Type Folder */}
+        <div
+          onClick={() => toggleFolder(testTypeId)}
+          className="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer transition-all"
+        >
+          <input
+            type="checkbox"
+            checked={checkedFolders.has(testTypeId)}
+            onChange={() => toggleCheck(testTypeId)}
+            onClick={(e) => e.stopPropagation()}
+            className="w-5 h-5 cursor-pointer"
+          />
+          <span className="text-2xl">{isExpanded ? '📂' : '📁'}</span>
+          <span className="font-bold text-gray-700 flex-1">{testType}</span>
+          <span className="text-sm text-gray-500">{tests.length} tests</span>
+        </div>
+
+        {/* Tests List */}
+        {isExpanded && (
+          <div className="mt-2 ml-6 space-y-2 border-l-2 border-indigo-300 pl-4">
+            {tests.map((test, idx) => {
+              const testId = `${testTypeId}-${idx}`
               return (
                 <div
-                  key={subjectId}
-                  className="flex items-center gap-3 p-2 bg-indigo-50 rounded-lg border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100 transition-all"
+                  key={testId}
+                  className="flex items-center gap-3 p-2 bg-indigo-50 rounded-lg border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100 transition-all cursor-pointer"
                 >
                   <input
                     type="checkbox"
-                    checked={checkedFolders.has(subjectId)}
-                    onChange={() => toggleCheck(subjectId)}
+                    checked={checkedFolders.has(testId)}
+                    onChange={() => toggleCheck(testId)}
                     className="w-4 h-4 cursor-pointer"
                   />
-                  <span className="text-lg">📄</span>
-                  <span className="text-gray-700 font-medium">{subject}</span>
+                  <span className="text-lg">📝</span>
+                  <span className="text-gray-700 font-medium flex-1">{test}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (onStartTest) {
+                        onStartTest(testId, test)
+                      } else {
+                        alert(`Starting mock test: ${test}\n\nTest handler not configured.`)
+                      }
+                    }}
+                    className="px-3 py-1 bg-indigo-600 text-white text-xs font-bold rounded hover:bg-indigo-700 transition-all"
+                  >
+                    Start Test
+                  </button>
                 </div>
               )
             })}
@@ -192,45 +338,78 @@ export default function FolderView({ category }: { category: 'study-material' | 
         </div>
 
         {/* Exam Selector */}
-        <div className="flex gap-3">
-          {(['UPSC', 'TNPSC'] as ExamType[]).map(exam => (
-            <button
-              key={exam}
-              onClick={() => {
-                setSelectedExam(exam)
-                setExpandedFolders(new Set())
-                setCheckedFolders(new Set())
-                setActionMessage(null)
-              }}
-              className={`px-6 py-2 rounded-lg font-bold transition-all ${
-                selectedExam === exam
-                  ? 'bg-indigo-600 text-white shadow-lg'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {exam}
-            </button>
-          ))}
+        <div className="flex gap-3 flex-wrap">
+          {(['UPSC', 'TNPSC'] as ExamType[]).map(exam => {
+            // If allowedExams is non-empty, check if this exam is allowed
+            const hasAccess = allowedExams.length === 0 || allowedExams.includes(exam) || allowedExams.includes('BOTH')
+            return (
+              <button
+                key={exam}
+                onClick={() => {
+                  if (!hasAccess) {
+                    setActionMessage(`🔒 You are not enrolled in ${exam}. Please contact us to upgrade your plan.`)
+                    return
+                  }
+                  setSelectedExam(exam)
+                  setExpandedFolders(new Set())
+                  setCheckedFolders(new Set())
+                  setActionMessage(null)
+                }}
+                className={`px-6 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${
+                  selectedExam === exam && hasAccess
+                    ? 'bg-indigo-600 text-white shadow-lg'
+                    : hasAccess
+                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-60'
+                }`}
+              >
+                {!hasAccess && <span>🔒</span>}
+                {exam}
+              </button>
+            )
+          })}
         </div>
       </div>
 
       {/* Folder Structure */}
       <div className="space-y-4">
-        {/* Prelims Section */}
-        <div className="bg-white rounded-lg p-4 border border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <span>📚</span> Prelims
-          </h3>
-          {renderSubjects(selectedExam, 'Prelims', `${selectedExam}-prelims`)}
-        </div>
+        {category === 'mock-tests' ? (
+          <>
+            {/* Full Length Mock Test Section */}
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <span>📝</span> Full Length Mock Test
+              </h3>
+              {renderMockTests(selectedExam, 'Full Length Mock Test', `${selectedExam}-full-length`)}
+            </div>
 
-        {/* Mains Section */}
-        <div className="bg-white rounded-lg p-4 border border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <span>📖</span> Mains
-          </h3>
-          {renderSubjects(selectedExam, 'Mains', `${selectedExam}-mains`)}
-        </div>
+            {/* Subject Specific Mock Test Section */}
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <span>📊</span> Subject Specific Mock Test
+              </h3>
+              {renderMockTests(selectedExam, 'Subject Specific Mock Test', `${selectedExam}-subject-specific`)}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Prelims Section */}
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <span>📚</span> Prelims
+              </h3>
+              {renderSubjects(selectedExam, 'Prelims', `${selectedExam}-prelims`)}
+            </div>
+
+            {/* Mains Section */}
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <span>📖</span> Mains
+              </h3>
+              {renderSubjects(selectedExam, 'Mains', `${selectedExam}-mains`)}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mt-6 flex items-center justify-between gap-3 text-sm">

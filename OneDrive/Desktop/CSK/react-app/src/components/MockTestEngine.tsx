@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { getAllScoresForTest } from '../firebase/firestore'
 
 interface Question {
   id: number
@@ -16,7 +17,9 @@ interface MockTestEngineProps {
   timeLimit: number // in minutes
   passingScore: number
   questions: Question[]
+  userId: string
   onComplete: (score: number, answers: Record<number, number>) => void
+  onSubmit?: (score: number, correctAnswers: number) => Promise<void>
   onClose: () => void
 }
 
@@ -27,67 +30,112 @@ export default function MockTestEngine({
   timeLimit,
   passingScore,
   questions,
+  userId,
   onComplete,
+  onSubmit,
   onClose,
 }: MockTestEngineProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<number, number>>({})
-  const [timeLeft, setTimeLeft] = useState(timeLimit * 60) // convert to seconds
+  const [timeLeft, setTimeLeft] = useState(timeLimit * 60)
   const [isTestCompleted, setIsTestCompleted] = useState(false)
   const [score, setScore] = useState(0)
   const [showReview, setShowReview] = useState(false)
+  const [rank, setRank] = useState<number | null>(null)
+  const [totalParticipants, setTotalParticipants] = useState<number>(0)
+  const [percentile, setPercentile] = useState<string>('')
 
-  // Timer effect
+  // Refs so async functions always read latest values (no stale closures)
+  const answersRef = useRef<Record<number, number>>({})
+  const hasSubmittedRef = useRef(false)
+
+  useEffect(() => { answersRef.current = answers }, [answers])
+
+  // The submit function — fully synchronous, shows results instantly
+  const handleSubmitTest = () => {
+    if (hasSubmittedRef.current) return
+    hasSubmittedRef.current = true
+
+    const snap = answersRef.current
+    let correctCount = 0
+    questions.forEach((q) => {
+      if (snap[q.id] === q.correctAnswer) correctCount++
+    })
+
+    const finalScore = Math.round((correctCount / questions.length) * 100)
+
+    let calculatedPercentile = ''
+    if (finalScore >= 90) calculatedPercentile = 'Excellent! 🌟'
+    else if (finalScore >= 70) calculatedPercentile = 'Great Job! 💪'
+    else if (finalScore >= 50) calculatedPercentile = 'Good Job! 👍'
+    else calculatedPercentile = 'Keep Practicing! 📚'
+
+    // Set all state at once — results screen shows immediately
+    setScore(finalScore)
+    setRank(1)
+    setTotalParticipants(1)
+    setPercentile(calculatedPercentile)
+    setIsTestCompleted(true)
+
+    // Fire-and-forget background saves
+    if (onSubmit) {
+      onSubmit(finalScore, correctCount).catch((err: any) => console.error('Save failed:', err))
+    }
+
+    getAllScoresForTest(testId).then((allScores) => {
+      const combined = [...allScores.map(s => s.score), finalScore].sort((a, b) => b - a)
+      const userRank = combined.indexOf(finalScore) + 1
+      const total = combined.length
+      if (total > 1) {
+        const pct = ((total - userRank + 1) / total) * 100
+        let pctLabel = ''
+        if (pct >= 99) pctLabel = 'Top 1% 🏆'
+        else if (pct >= 95) pctLabel = 'Top 5% 🥇'
+        else if (pct >= 90) pctLabel = 'Top 10% 🥈'
+        else if (pct >= 75) pctLabel = 'Top 25% 🥉'
+        else if (pct >= 50) pctLabel = 'Top 50% ⭐'
+        else pctLabel = `${Math.round(pct)}th percentile`
+        setRank(userRank)
+        setTotalParticipants(total)
+        setPercentile(pctLabel)
+      }
+    }).catch(() => {})
+  }
+
+  // Keep a ref to handleSubmitTest so the timer always calls the latest version
+  const submitRef = useRef(handleSubmitTest)
+  useEffect(() => { submitRef.current = handleSubmitTest })
+
+  // Timer
   useEffect(() => {
-    if (timeLeft <= 0 || isTestCompleted) return
-
+    if (isTestCompleted) return
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          handleSubmitTest()
+          clearInterval(timer)
+          submitRef.current()
           return 0
         }
         return prev - 1
       })
     }, 1000)
-
     return () => clearInterval(timer)
-  }, [timeLeft, isTestCompleted])
+  }, [isTestCompleted])
 
   const currentQuestion = questions[currentQuestionIndex]
   const timeLeftMinutes = Math.floor(timeLeft / 60)
   const timeLeftSeconds = timeLeft % 60
 
   const handleSelectAnswer = (optionIndex: number) => {
-    setAnswers({
-      ...answers,
-      [currentQuestion.id]: optionIndex,
-    })
+    setAnswers(prev => ({ ...prev, [currentQuestion.id]: optionIndex }))
   }
 
   const handleNext = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
-    }
+    if (currentQuestionIndex < questions.length - 1) setCurrentQuestionIndex(currentQuestionIndex + 1)
   }
 
   const handlePrevious = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1)
-    }
-  }
-
-  const handleSubmitTest = () => {
-    let correctCount = 0
-    questions.forEach((q) => {
-      if (answers[q.id] === q.correctAnswer) {
-        correctCount++
-      }
-    })
-
-    const finalScore = Math.round((correctCount / questions.length) * 100)
-    setScore(finalScore)
-    setIsTestCompleted(true)
+    if (currentQuestionIndex > 0) setCurrentQuestionIndex(currentQuestionIndex - 1)
   }
 
   if (isTestCompleted && !showReview) {
@@ -112,16 +160,11 @@ export default function MockTestEngine({
           <div className="bg-gray-100 rounded-lg p-6 mb-6">
             <p className="text-5xl font-black text-indigo-600 mb-2">{score}%</p>
             <p className="text-gray-600">
-              {Math.round(
-                (answers[questions[0].id] !== undefined ? Object.keys(answers).length : 0) /
-                  questions.length *
-                  100
-              )}
-              % Questions Attempted
+              {Math.round((attemptedQuestions / questions.length) * 100)}% Questions Attempted
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
+          <div className="grid grid-cols-3 gap-4 mb-6 text-sm">
             <div className="bg-green-50 rounded-lg p-3">
               <p className="text-gray-600">Correct</p>
               <p className="text-2xl font-black text-green-600">
@@ -132,6 +175,15 @@ export default function MockTestEngine({
               <p className="text-gray-600">Incorrect</p>
               <p className="text-2xl font-black text-red-600">
                 {questions.length - Math.round((score / 100) * questions.length)}
+              </p>
+            </div>
+            <div className="bg-pink-50 rounded-lg p-3">
+              <p className="text-gray-600 text-xs">Your Rank</p>
+              <p className="text-xl font-black text-pink-600">
+                {rank !== null ? `#${rank}` : '#1'}/{totalParticipants || 1}
+              </p>
+              <p className="text-xs text-gray-500 font-semibold">
+                {percentile || (score >= 70 ? 'Great Job! 💪' : 'Good Effort! 📚')}
               </p>
             </div>
           </div>

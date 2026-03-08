@@ -1,9 +1,11 @@
 import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import CourseCard from '../components/CourseCard'
+import { useAuth } from '../context/AuthContext.tsx'
 
 export default function Home(){
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
   return (
     <div className="bg-white">
       {/* Hero Section */}
@@ -35,29 +37,18 @@ export default function Home(){
                 Explore Courses
               </button>
             </div>
-            <div className="flex gap-8 pt-6">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-yellow-300">5000+</div>
-                <div className="text-sm text-indigo-100">Students Enrolled</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-yellow-300">95%</div>
-                <div className="text-sm text-indigo-100">Success Rate</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-yellow-300">200+</div>
-                <div className="text-sm text-indigo-100">Hours Content</div>
-              </div>
-            </div>
+
           </div>
           
-          <div className="relative">
+          <div className="relative flex items-center justify-center">
             <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-2xl blur-2xl opacity-75"></div>
-            <img 
-              src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=600&q=80" 
-              alt="Students learning" 
-              className="relative rounded-2xl shadow-2xl transform hover:scale-105 transition-transform duration-300"
-            />
+            <div className="relative bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-10 flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
+              <img
+                src="/images/csk-logo.png"
+                alt="CSK Logo"
+                className="w-72 h-72 object-contain drop-shadow-2xl"
+              />
+            </div>
           </div>
         </div>
       </section>
