@@ -1,0 +1,37 @@
+import React, { ReactNode } from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
+// ============================================================
+// 🔐 Must match AuthContext.tsx and Login.tsx ADMIN_EMAIL
+// ============================================================
+const ADMIN_EMAIL = 'civilserviceskendra@gmail.com';
+
+interface AdminRouteProps {
+  children: ReactNode;
+}
+
+export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
+  const { user, loading, isAdmin } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // ✅ Triple lock: isAdmin flag + exact email match + must be logged in
+  const emailMatch = user.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase();
+
+  if (!isAdmin || !emailMatch) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
