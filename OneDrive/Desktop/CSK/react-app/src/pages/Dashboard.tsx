@@ -2,7 +2,9 @@ import React, {useEffect, useState} from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.tsx'
 import { logout } from '../firebase/auth.ts'
-import { getStudentStats, getVideosWatchedByUser, getMockTestScoresByUser, isUserAdmin } from '../firebase/firestore.ts'
+import { getStudentStats, getVideosWatchedByUser, getMockTestScoresByUser, isUserAdmin, getLiveSessions, getVideosFromDatabase, addVideoToDatabase, FirestoreLiveSession } from '../firebase/firestore.ts'
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { storage } from '../firebase/config.ts'
 import { initProtections } from '../utils/protections'
 import MockTestEngine from '../components/MockTestEngine'
 import FolderView from '../components/FolderView'
@@ -37,12 +39,158 @@ export default function Dashboard(){
   const [testScores, setTestScores] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [totalVideosCount, setTotalVideosCount] = useState<number>(0)
+  const [liveSessions, setLiveSessions] = useState<FirestoreLiveSession[]>([])
+  const [sessionFormOpen, setSessionFormOpen] = useState(false)
+  const [sessionSaving, setSessionSaving] = useState(false)
+  const [sessionDeleting, setSessionDeleting] = useState<string | null>(null)
+  const [newSession, setNewSession] = useState({
+    title: '', topic: '', instructor: '', description: '',
+    scheduledAt: '', duration: 60, meetLink: '',
+    status: 'upcoming' as 'upcoming' | 'live' | 'completed',
+    category: 'UPSC' as 'UPSC' | 'TNPSC'
+  })
 
   // State for notes feature
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const [notesContent, setNotesContent] = useState('')
   const [savedNotes, setSavedNotes] = useState<{[key: string]: string}>({})
   const [currentNoteSession, setCurrentNoteSession] = useState<string>('')
+
+  // ── Mock Test Management (Admin) ──────────────────────────────────────
+  interface MockQuestion {
+    id: string
+    testId: string
+    testName: string
+    question: string
+    options: string[]
+    correctAnswer: number
+    explanation: string
+    category: string
+  }
+  const [mqTestId, setMqTestId] = useState('gs-paper-1')
+  const [allMockQuestions, setAllMockQuestions] = useState<MockQuestion[]>([])
+  const [mqModalMode, setMqModalMode] = useState<'add' | 'edit' | null>(null)
+  const [mqEditTarget, setMqEditTarget] = useState<MockQuestion | null>(null)
+  const [mqForm, setMqForm] = useState({ question: '', options: ['', '', '', ''], correctAnswer: 0, explanation: '', category: '' })
+  const [mqImportError, setMqImportError] = useState('')
+
+  const MOCK_TEST_OPTIONS = [
+    // UPSC → Prelims
+    { id: 'upsc-prelims-indian-polity',   name: 'Indian Polity',        group: 'UPSC › Prelims' },
+    { id: 'upsc-prelims-history',          name: 'History',               group: 'UPSC › Prelims' },
+    { id: 'upsc-prelims-indian-economy',   name: 'Indian Economy',        group: 'UPSC › Prelims' },
+    { id: 'upsc-prelims-geography',        name: 'Geography',             group: 'UPSC › Prelims' },
+    { id: 'upsc-prelims-environment',      name: 'Environment',           group: 'UPSC › Prelims' },
+    { id: 'upsc-prelims-science-tech',     name: 'Science and Tech',      group: 'UPSC › Prelims' },
+    { id: 'upsc-prelims-current-affairs',  name: 'Current Affairs',       group: 'UPSC › Prelims' },
+    { id: 'upsc-prelims-csat',             name: 'CSAT',                  group: 'UPSC › Prelims' },
+    // UPSC → Mains
+    { id: 'upsc-mains-gs1', name: 'GS 1', group: 'UPSC › Mains' },
+    { id: 'upsc-mains-gs2', name: 'GS 2', group: 'UPSC › Mains' },
+    { id: 'upsc-mains-gs3', name: 'GS 3', group: 'UPSC › Mains' },
+    { id: 'upsc-mains-gs4', name: 'GS 4', group: 'UPSC › Mains' },
+    // TNPSC → Prelims
+    { id: 'tnpsc-prelims-indian-polity',   name: 'Indian Polity',                               group: 'TNPSC › Prelims' },
+    { id: 'tnpsc-prelims-history',          name: 'History (Indian History + INM + TN History)', group: 'TNPSC › Prelims' },
+    { id: 'tnpsc-prelims-geography',        name: 'Geography',                                   group: 'TNPSC › Prelims' },
+    { id: 'tnpsc-prelims-indian-economy',   name: 'Indian Economy',                              group: 'TNPSC › Prelims' },
+    { id: 'tnpsc-prelims-unit9',            name: 'Unit 9',                                      group: 'TNPSC › Prelims' },
+    { id: 'tnpsc-prelims-current-affairs',  name: 'Current Affairs',                             group: 'TNPSC › Prelims' },
+    { id: 'tnpsc-prelims-aptitude',         name: 'Aptitude',                                    group: 'TNPSC › Prelims' },
+    // TNPSC → Mains
+    { id: 'tnpsc-mains-gs1', name: 'GS 1', group: 'TNPSC › Mains' },
+    { id: 'tnpsc-mains-gs2', name: 'GS 2', group: 'TNPSC › Mains' },
+    { id: 'tnpsc-mains-gs3', name: 'GS 3', group: 'TNPSC › Mains' },
+  ]
+
+  const loadMQs = (testId: string): MockQuestion[] => {
+    try {
+      const raw = localStorage.getItem(`mockQuestions_${testId}`)
+      if (raw) return JSON.parse(raw) as MockQuestion[]
+    } catch {}
+    return []
+  }
+  const saveMQs = (testId: string, questions: MockQuestion[]) => {
+    localStorage.setItem(`mockQuestions_${testId}`, JSON.stringify(questions))
+  }
+
+  const openAddMQ = () => {
+    setMqForm({ question: '', options: ['', '', '', ''], correctAnswer: 0, explanation: '', category: '' })
+    setMqEditTarget(null)
+    setMqModalMode('add')
+  }
+  const openEditMQ = (q: MockQuestion) => {
+    setMqForm({ question: q.question, options: [...q.options], correctAnswer: q.correctAnswer, explanation: q.explanation, category: q.category })
+    setMqEditTarget(q)
+    setMqModalMode('edit')
+  }
+  const deleteMQ = (id: string) => {
+    if (!confirm('Delete this question?')) return
+    const updated = allMockQuestions.filter(q => q.id !== id)
+    setAllMockQuestions(updated)
+    saveMQs(mqTestId, updated)
+  }
+  const saveMQForm = () => {
+    if (!mqForm.question.trim() || mqForm.options.some((o: string) => !o.trim())) {
+      alert('Please fill in the question and all 4 options.')
+      return
+    }
+    if (mqModalMode === 'add') {
+      const newQ: MockQuestion = { id: Date.now().toString(), testId: mqTestId, testName: mqTestId, ...mqForm }
+      const updated = [...allMockQuestions, newQ]
+      setAllMockQuestions(updated)
+      saveMQs(mqTestId, updated)
+    } else if (mqModalMode === 'edit' && mqEditTarget) {
+      const updated = allMockQuestions.map((q: MockQuestion) => q.id === mqEditTarget.id ? { ...q, ...mqForm } : q)
+      setAllMockQuestions(updated)
+      saveMQs(mqTestId, updated)
+    }
+    setMqModalMode(null)
+  }
+
+  const handleMQImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMqImportError('')
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string
+        const lines = text.split('\n').filter((l: string) => l.trim())
+        const imported: MockQuestion[] = []
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((c: string) => c.trim().replace(/^"|"$/g, ''))
+          if (cols.length < 6) continue
+          imported.push({
+            id: `${Date.now()}_${i}`,
+            testId: mqTestId,
+            testName: mqTestId,
+            question: cols[0],
+            options: [cols[1], cols[2], cols[3], cols[4]],
+            correctAnswer: parseInt(cols[5]) || 0,
+            explanation: cols[6] || '',
+            category: cols[7] || '',
+          })
+        }
+        if (imported.length === 0) { setMqImportError('No valid rows found. Check format.'); return }
+        const updated = [...allMockQuestions, ...imported]
+        setAllMockQuestions(updated)
+        saveMQs(mqTestId, updated)
+        alert(`Imported ${imported.length} question(s) successfully!`)
+        e.target.value = ''
+      } catch {
+        setMqImportError('Failed to parse file. Ensure CSV format is correct.')
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  React.useEffect(() => {
+    if (activeTab === 'tests' && isAdmin) {
+      setAllMockQuestions(loadMQs(mqTestId))
+    }
+  }, [activeTab, mqTestId, isAdmin])
 
   // Demo data for testing/preview
   const [showDemoData, setShowDemoData] = useState(false)
@@ -96,10 +244,12 @@ export default function Dashboard(){
         setError(null)
         
         // Fetch ALL data in parallel with Promise.allSettled for faster loading
-        const [statsResult, videosResult, scoresResult] = await Promise.allSettled([
+        const [statsResult, videosResult, scoresResult, sessionsResult, allVideosResult] = await Promise.allSettled([
           getStudentStats(user.uid),
           getVideosWatchedByUser(user.uid),
-          getMockTestScoresByUser(user.uid)
+          getMockTestScoresByUser(user.uid),
+          getLiveSessions(),
+          getVideosFromDatabase()
         ])
 
         // Process stats
@@ -131,6 +281,19 @@ export default function Dashboard(){
         } else {
           console.warn('⚠️ Test scores unavailable')
           setTestScores([])
+        }
+
+        // Process live sessions
+        if (sessionsResult.status === 'fulfilled') {
+          setLiveSessions(sessionsResult.value)
+        } else {
+          console.warn('⚠️ Live sessions unavailable')
+          setLiveSessions([])
+        }
+
+        // Process total videos count
+        if (allVideosResult.status === 'fulfilled') {
+          setTotalVideosCount(allVideosResult.value.length)
         }
 
 
@@ -225,6 +388,47 @@ export default function Dashboard(){
     navigate('/upload-video')
   }
 
+  // Add a live session (admin)
+  const handleAddSession = async () => {
+    if (!newSession.title.trim() || !newSession.meetLink.trim() || !newSession.scheduledAt) {
+      alert('Please fill in Title, Meet Link, and Scheduled Date/Time.')
+      return
+    }
+    setSessionSaving(true)
+    try {
+      const { addLiveSession } = await import('../firebase/firestore.ts')
+      await addLiveSession({
+        ...newSession,
+        scheduledAt: new Date(newSession.scheduledAt),
+        duration: Number(newSession.duration),
+      })
+      const updated = await getLiveSessions()
+      setLiveSessions(updated)
+      setSessionFormOpen(false)
+      setNewSession({ title: '', topic: '', instructor: '', description: '', scheduledAt: '', duration: 60, meetLink: '', status: 'upcoming', category: 'UPSC' })
+      alert('✅ Live session added!')
+    } catch (e) {
+      alert('❌ Failed to add session. Please try again.')
+    } finally {
+      setSessionSaving(false)
+    }
+  }
+
+  // Delete a live session (admin)
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!confirm('Delete this live session?')) return
+    setSessionDeleting(sessionId)
+    try {
+      const { deleteLiveSession } = await import('../firebase/firestore.ts')
+      await deleteLiveSession(sessionId)
+      setLiveSessions(prev => prev.filter(s => s.id !== sessionId))
+    } catch (e) {
+      alert('❌ Failed to delete session.')
+    } finally {
+      setSessionDeleting(null)
+    }
+  }
+
   // Fallback data in case of loading
   const mockTests = [
     { id: 1, title: "General Studies - Paper 1", duration: "2 hrs", questions: 100, taken: true, score: 78 },
@@ -246,7 +450,7 @@ export default function Dashboard(){
   ]
 
   return (
-    <div className="flex bg-gray-50 min-h-screen">
+    <div className="flex bg-gray-50 dark:bg-gray-900 min-h-screen">
       {/* Mobile Hamburger Button - Visible on small screens */}
       <div className="fixed top-20 left-4 z-50 lg:hidden">
         <button 
@@ -258,53 +462,59 @@ export default function Dashboard(){
       </div>
 
       {/* Sidebar - Hidden on mobile, visible on lg+ */}
-      <aside className={`fixed lg:static inset-0 lg:inset-auto w-64 bg-white border-r border-gray-200 shadow-lg sticky top-0 h-screen overflow-y-auto transition-all duration-300 z-40 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <div className="p-6 border-b border-gray-200 flex flex-col items-center gap-3">
+      <aside className={`fixed lg:static inset-0 lg:inset-auto w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-lg sticky top-0 h-screen overflow-y-auto transition-all duration-300 z-40 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex flex-col items-center gap-3">
           <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-full flex items-center justify-center shadow-lg">
             {isAdmin ? (
               <span className="text-white text-2xl">👤</span>
             ) : (
-              <span className="text-white font-black text-base tracking-wide">CSK</span>
+              <span className="text-white font-black text-base tracking-wide">
+                {user?.displayName ? user.displayName.trim().charAt(0).toUpperCase() : '👤'}
+              </span>
             )}
           </div>
           <div className="text-center">
-            <h2 className="font-black text-sm text-gray-900">{isAdmin ? 'Admin' : 'Civil Services Kendra'}</h2>
-            <p className="text-xs text-gray-500">{isAdmin ? 'Administrator Panel' : 'Your Learning Platform'}</p>
+            <h2 className="font-black text-sm text-gray-900 dark:text-white">
+              {isAdmin ? 'Admin' : (user?.displayName?.trim() || user?.email?.split('@')[0] || 'User')}
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{isAdmin ? 'Administrator Panel' : 'Your Learning Platform'}</p>
           </div>
         </div>
 
         <nav className="p-4 space-y-2">
-          <button onClick={() => { setActiveTab('overview'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'overview' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
-            📊 Overview
+          {/* Overview / Cockpit */}
+          <button onClick={() => { setActiveTab('overview'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'overview' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+            {isAdmin ? '📊 Overview' : `🚀 ${(user?.displayName?.trim().split(' ')[0] || user?.email?.split('@')[0] || 'My')}'s Cockpit`}
           </button>
-          <button onClick={() => { setActiveTab('videos'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'videos' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
-            🔴 Live Sessions
-          </button>
-          <button onClick={() => { setActiveTab('lectures'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'lectures' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
-            📹 Recorded Lectures
-          </button>
-          <button onClick={() => { setActiveTab('materials'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'materials' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
-            📚 Study Materials
-          </button>
-          <button onClick={() => { setActiveTab('tests'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'tests' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
-            ✅ Mock Tests
-          </button>
+
+          {/* Live Sessions — visible to non-admin users only */}
+          {!isAdmin && (
+            <button onClick={() => { setActiveTab('videos'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'videos' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+              🔴 Live Sessions
+            </button>
+          )}
+
+          {/* Admin-only tabs */}
+          {isAdmin && (
+            <>
+              <button onClick={() => { setActiveTab('lectures'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'lectures' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                📹 Recorded Lectures
+              </button>
+              <button onClick={() => { setActiveTab('materials'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'materials' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                <span className="block">📚 Access Study Materials</span>
+                <span className="block text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">Your Tailored Notes</span>
+              </button>
+              <button onClick={() => { setActiveTab('tests'); setSidebarOpen(false) }} className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'tests' ? 'bg-indigo-100 text-indigo-700 border-l-4 border-indigo-600' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                ✅ Mock Tests
+              </button>
+            </>
+          )}
         </nav>
 
-        {/* UPLOAD VIDEOS BUTTON - For Admins */}
-        <div className="p-4 border-t border-gray-200">
-          <button 
-            onClick={handleOpenUploadVideos}
-            disabled={checkingUploadAccess}
-            className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-lg hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            {checkingUploadAccess ? '⏳ Checking Access...' : '📹 Upload Videos'}
-          </button>
-        </div>
 
         {/* LOGOUT BUTTON */}
-        <div className="p-4 border-t border-gray-200 mt-auto">
-          <button 
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto">
+          <button
             onClick={handleLogout}
             disabled={loggingOut}
             className="w-full px-4 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -315,22 +525,21 @@ export default function Dashboard(){
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8">
-        {/* Back Button */}
-        <div className="mb-6">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all font-semibold"
-          >
-            ← Back to Home
-          </button>
-        </div>
-        
+      <main className="flex-1 p-8 dark:bg-gray-900">
+
         {activeTab === 'overview' && (
           <div>
             <div className="mb-8">
-              <h1 className="text-4xl font-black text-gray-900">Welcome Back, {isAdmin ? 'Admin' : (user?.displayName?.trim() || 'Student')}! 👋</h1>
-              <p className="mt-2 text-gray-600">Keep up the great work! You're on track for success.</p>
+              {isAdmin ? (
+                <h1 className="text-4xl font-black text-gray-900 dark:text-white">Hello Admin 👋</h1>
+              ) : (
+                <h1 className="text-4xl font-black text-gray-900 dark:text-white">
+                  {(() => {
+                    const firstName = user?.displayName?.trim().split(' ')[0] || user?.email?.split('@')[0] || 'My'
+                    return `${firstName}'s Cockpit 🚀`
+                  })()}
+                </h1>
+              )}
             </div>
 
             {error && (
@@ -339,160 +548,110 @@ export default function Dashboard(){
               </div>
             )}
 
+            {/* ── MY COURSES ─────────────────────────────────────────────── */}
+            {!isAdmin && (
+              <MyCourses enrolledCourses={enrolledCourses} navigate={navigate} />
+            )}
+
             {loading ? (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 animate-pulse">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="bg-white rounded-xl p-6 border-2 border-gray-200">
-                      <div className="h-4 bg-gray-300 rounded w-1/2 mb-3"></div>
-                      <div className="h-8 bg-gray-300 rounded"></div>
-                      <div className="h-3 bg-gray-300 rounded w-2/3 mt-3"></div>
-                    </div>
-                  ))}
-                </div>
+                {!isAdmin && (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 animate-pulse">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="bg-white rounded-xl p-6 border-2 border-gray-200">
+                        <div className="h-4 bg-gray-300 rounded w-1/2 mb-3"></div>
+                        <div className="h-8 bg-gray-300 rounded"></div>
+                        <div className="h-3 bg-gray-300 rounded w-2/3 mt-3"></div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="bg-white rounded-xl p-6 border-2 border-gray-200 h-64 animate-pulse"></div>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                  {/* Total Hours Card */}
-                  <button
-                    onClick={() => setActiveTab('videos')}
-                    className="bg-white rounded-xl p-6 border-2 border-indigo-100 shadow-md hover:shadow-lg hover:border-indigo-300 transition-all transform hover:scale-105 text-left cursor-pointer"
-                  >
-                    <p className="text-gray-600 font-semibold text-sm">Total Hours</p>
-                    <p className="text-3xl font-black text-indigo-600 mt-2">
-                      {displayStats?.totalHoursWatched > 0 ? displayStats.totalHoursWatched.toFixed(1) : '0.0'} hrs
-                    </p>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {displayStats?.videosWatched > 0 ? (
-                        <>↑ {displayStats.videosWatched} videos watched</>
-                      ) : (
-                        <>👆 Click to watch videos</>
-                      )}
-                    </p>
-                  </button>
-
-                  {/* Avg Score Card */}
-                  <button
-                    onClick={() => setActiveTab('tests')}
-                    className="bg-white rounded-xl p-6 border-2 border-blue-100 shadow-md hover:shadow-lg hover:border-blue-300 transition-all transform hover:scale-105 text-left cursor-pointer"
-                  >
-                    <p className="text-gray-600 font-semibold text-sm">Avg Score</p>
-                    <p className="text-3xl font-black text-blue-600 mt-2">
-                      {displayStats?.averageTestScore > 0 ? displayStats.averageTestScore : '0'}%
-                    </p>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {displayStats?.mockTestsCompleted > 0 ? (
-                        <>{displayStats.mockTestsCompleted} tests taken</>
-                      ) : (
-                        <>👆 Click to take tests</>
-                      )}
-                    </p>
-                  </button>
-
-                  {/* Streak Card */}
-                  <button
-                    onClick={() => {
-                      alert('🔥 Study daily to build your streak!\n\nTips:\n• Watch at least 1 video daily\n• Complete mock tests regularly\n• Download study materials\n• Attend live sessions')
-                    }}
-                    className="bg-white rounded-xl p-6 border-2 border-purple-100 shadow-md hover:shadow-lg hover:border-purple-300 transition-all transform hover:scale-105 text-left cursor-pointer"
-                  >
-                    <p className="text-gray-600 font-semibold text-sm">Streak</p>
-                    <p className="text-3xl font-black text-purple-600 mt-2">
-                      {displayStats?.currentStreak > 0 ? displayStats.currentStreak : '0'} days
-                    </p>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {displayStats?.currentStreak > 0 ? 'Keep it going! 🔥' : '👆 Start your streak!'}
-                    </p>
-                  </button>
-
-                  {/* Rank Card */}
-                  <button
-                    onClick={() => {
-                      const rank = displayStats?.averageTestScore > 80 ? '#245' : displayStats?.averageTestScore > 60 ? '#1,245' : displayStats?.averageTestScore >= 0 && displayStats?.testsTaken > 0 ? '#5,678' : 'N/A'
-                      const percentile = displayStats?.averageTestScore > 80 ? 'Top 1%' : displayStats?.averageTestScore > 60 ? 'Top 3%' : displayStats?.testsTaken > 0 ? 'Top 15%' : 'No rank yet'
-                      alert(`🏆 Your Current Rank\n\nRank: ${rank}\nPercentile: ${percentile}\n\n${displayStats?.testsTaken === 0 ? '💡 Take mock tests to get ranked!' : displayStats?.averageTestScore === 0 ? '💪 Keep trying! Every attempt counts!' : '💪 Keep studying to climb higher!'}`)
-                    }}
-                    className="bg-white rounded-xl p-6 border-2 border-pink-100 shadow-md hover:shadow-lg hover:border-pink-300 transition-all transform hover:scale-105 text-left cursor-pointer"
-                  >
-                    <p className="text-gray-600 font-semibold text-sm">Rank (Est.)</p>
-                    <p className="text-3xl font-black text-pink-600 mt-2">
-                      {displayStats?.averageTestScore > 80 ? '#245' : displayStats?.averageTestScore > 60 ? '#1,245' : displayStats?.averageTestScore >= 0 && displayStats?.testsTaken > 0 ? '#5,678' : '--'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {displayStats?.averageTestScore > 80 ? 'Top 1% 🚀' : displayStats?.averageTestScore > 60 ? 'Top 3% 🚀' : displayStats?.testsTaken > 0 ? 'Top 15% 📈' : '👆 Start climbing!'}
-                    </p>
-                  </button>
-                </div>
-
-                {/* Demo Data Toggle - Show when no activity */}
-                {(!stats?.videosWatched || stats.videosWatched === 0) && (!stats?.mockTestsCompleted || stats.mockTestsCompleted === 0) && (
-                  <div className="mb-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">💡</span>
-                      <div>
-                        <p className="font-bold text-gray-900">New here? See how your dashboard will look</p>
-                        <p className="text-sm text-gray-600">Toggle demo data to preview stats with sample numbers</p>
-                      </div>
-                    </div>
+                {!isAdmin && (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                    {/* Total Videos Watched Card */}
                     <button
-                      onClick={() => setShowDemoData(!showDemoData)}
-                      className={`px-6 py-3 rounded-lg font-bold transition-all transform hover:scale-105 ${
-                        showDemoData 
-                          ? 'bg-red-500 text-white hover:bg-red-600' 
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                      }`}
+                      onClick={() => setActiveTab('videos')}
+                      className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-indigo-100 dark:border-indigo-900 shadow-md hover:shadow-lg hover:border-indigo-300 transition-all transform hover:scale-105 text-left cursor-pointer"
                     >
-                      {showDemoData ? '🔴 Hide Demo' : '▶️ Show Demo'}
+                      <p className="text-gray-600 dark:text-gray-400 font-semibold text-sm">Total Videos Watched</p>
+                      <p className="text-3xl font-black text-indigo-600 mt-2">
+                        {displayStats?.videosWatched ?? 0}
+                        <span className="text-lg font-semibold text-gray-400 dark:text-gray-500"> / {totalVideosCount > 0 ? totalVideosCount : (showDemoData ? 45 : 0)}</span>
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {(displayStats?.videosWatched ?? 0) > 0 ? (
+                          <>▶️ {displayStats!.videosWatched} watched so far</>
+                        ) : (
+                          <>👆 Click to watch videos</>
+                        )}
+                      </p>
+                    </button>
+
+                    {/* Avg Score Card */}
+                    <button
+                      onClick={() => setActiveTab('tests')}
+                      className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-blue-100 dark:border-blue-900 shadow-md hover:shadow-lg hover:border-blue-300 transition-all transform hover:scale-105 text-left cursor-pointer"
+                    >
+                      <p className="text-gray-600 dark:text-gray-400 font-semibold text-sm">Avg Score</p>
+                      <p className="text-3xl font-black text-blue-600 mt-2">
+                        {(displayStats?.averageTestScore ?? 0) > 0 ? displayStats!.averageTestScore : '0'}%
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {(displayStats?.mockTestsCompleted ?? 0) > 0 ? (
+                          <>{displayStats!.mockTestsCompleted} tests taken</>
+                        ) : (
+                          <>👆 Click to take tests</>
+                        )}
+                      </p>
+                    </button>
+
+                    {/* Streak Card */}
+                    <button
+                      onClick={() => {
+                        alert('🔥 Study daily to build your streak!\n\nTips:\n• Watch at least 1 video daily\n• Complete mock tests regularly\n• Download study materials\n• Attend live sessions')
+                      }}
+                      className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-purple-100 dark:border-purple-900 shadow-md hover:shadow-lg hover:border-purple-300 transition-all transform hover:scale-105 text-left cursor-pointer"
+                    >
+                      <p className="text-gray-600 dark:text-gray-400 font-semibold text-sm">Streak</p>
+                      <p className="text-3xl font-black text-purple-600 mt-2">
+                        {(displayStats?.currentStreak ?? 0) > 0 ? displayStats!.currentStreak : '0'} days
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {(displayStats?.currentStreak ?? 0) > 0 ? 'Keep it going! 🔥' : '👆 Start your streak!'}
+                      </p>
+                    </button>
+
+                    {/* Rank Card */}
+                    <button
+                      onClick={() => {
+                        const score = displayStats?.averageTestScore ?? 0
+                        const testsDone = displayStats?.mockTestsCompleted ?? 0
+                        const rank = score > 80 ? '#245' : score > 60 ? '#1,245' : testsDone > 0 ? '#5,678' : 'N/A'
+                        const percentile = score > 80 ? 'Top 1%' : score > 60 ? 'Top 3%' : testsDone > 0 ? 'Top 15%' : 'No rank yet'
+                        alert(`🏆 Your Current Rank\n\nRank: ${rank}\nPercentile: ${percentile}\n\n${testsDone === 0 ? '💡 Take mock tests to get ranked!' : score === 0 ? '💪 Keep trying! Every attempt counts!' : '💪 Keep studying to climb higher!'}`)
+                      }}
+                      className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-pink-100 dark:border-pink-900 shadow-md hover:shadow-lg hover:border-pink-300 transition-all transform hover:scale-105 text-left cursor-pointer"
+                    >
+                      <p className="text-gray-600 dark:text-gray-400 font-semibold text-sm">Rank (Est.)</p>
+                      <p className="text-3xl font-black text-pink-600 mt-2">
+                        {(() => { const s = displayStats?.averageTestScore ?? 0; const t = displayStats?.mockTestsCompleted ?? 0; return s > 80 ? '#245' : s > 60 ? '#1,245' : t > 0 ? '#5,678' : '--' })()}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {(() => { const s = displayStats?.averageTestScore ?? 0; const t = displayStats?.mockTestsCompleted ?? 0; return s > 80 ? 'Top 1% 🚀' : s > 60 ? 'Top 3% 🚀' : t > 0 ? 'Top 15% 📈' : '👆 Start climbing!' })()}
+                      </p>
                     </button>
                   </div>
                 )}
 
-                {/* Getting Started Guide - Show when no activity and no demo */}
-                {!showDemoData && (!stats?.videosWatched || stats.videosWatched === 0) && (!stats?.mockTestsCompleted || stats.mockTestsCompleted === 0) && (
-                  <div className="mb-8 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-6 shadow-lg text-white">
-                    <div className="flex items-start gap-4">
-                      <div className="text-4xl">🎯</div>
-                      <div className="flex-1">
-                        <h3 className="text-xl font-black mb-2">Welcome to CSK! Let's Get Started 🚀</h3>
-                        <p className="text-indigo-100 mb-4">
-                          You haven't started learning yet. Here's how to begin your journey:
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <button
-                            onClick={() => setActiveTab('videos')}
-                            className="bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg p-4 text-left transition-all"
-                          >
-                            <div className="text-2xl mb-2">🔴</div>
-                            <p className="font-bold text-sm">1. Join Live Sessions</p>
-                            <p className="text-xs text-indigo-100 mt-1">Connect with instructors</p>
-                          </button>
-                          <button
-                            onClick={() => setActiveTab('materials')}
-                            className="bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg p-4 text-left transition-all"
-                          >
-                            <div className="text-2xl mb-2">📚</div>
-                            <p className="font-bold text-sm">2. Download Notes</p>
-                            <p className="text-xs text-indigo-100 mt-1">Get study materials</p>
-                          </button>
-                          <button
-                            onClick={() => setActiveTab('tests')}
-                            className="bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg p-4 text-left transition-all"
-                          >
-                            <div className="text-2xl mb-2">✅</div>
-                            <p className="font-bold text-sm">3. Take Tests</p>
-                            <p className="text-xs text-indigo-100 mt-1">Practice mock tests</p>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
+                {!isAdmin && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200">
-                    <h3 className="text-lg font-black text-gray-900 mb-4">Recent Activity</h3>
+                  <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-md border border-gray-200 dark:border-gray-700">
+                    <h3 className="text-lg font-black text-gray-900 dark:text-white mb-4">Recent Activity</h3>
                     <div className="space-y-4">
                       {displayVideos.slice(0, 3).length > 0 ? (
                         <>
@@ -566,63 +725,10 @@ export default function Dashboard(){
                     </button>
                   </div>
                 </div>
+                )}
 
-                {/* Quick Actions */}
-                <div className="mt-8 bg-white rounded-xl p-6 shadow-lg border border-gray-200">
-                  <h3 className="text-xl font-black text-gray-900 mb-4">⚡ Quick Actions</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <button
-                      onClick={() => setActiveTab('videos')}
-                      className="p-4 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all transform hover:scale-105 text-left"
-                    >
-                      <div className="text-3xl mb-2">🔴</div>
-                      <p className="font-bold">Join Live Sessions</p>
-                      <p className="text-sm text-purple-100 mt-1">Connect with instructors</p>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('materials')}
-                      className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all transform hover:scale-105 text-left"
-                    >
-                      <div className="text-3xl mb-2">📚</div>
-                      <p className="font-bold">Study Materials</p>
-                      <p className="text-sm text-blue-100 mt-1">Download resources</p>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('tests')}
-                      className="p-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg transition-all transform hover:scale-105 text-left"
-                    >
-                      <div className="text-3xl mb-2">✅</div>
-                      <p className="font-bold">Take Mock Test</p>
-                      <p className="text-sm text-green-100 mt-1">Practice questions</p>
-                    </button>
-                  </div>
-                </div>
 
-                {/* Progress Chart Section */}
-                <div className="mt-8 bg-white rounded-xl p-6 shadow-lg border border-gray-200">
-                  <h3 className="text-xl font-black text-gray-900 mb-4">📊 Your Progress This Week</h3>
-                  <div className="grid grid-cols-7 gap-2">
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
-                      <div key={day} className="text-center">
-                        <p className="text-xs text-gray-500 mb-2">{day}</p>
-                        <div
-                          className={`h-20 rounded-lg ${index <= 4 ? 'bg-indigo-500' : 'bg-gray-200'} flex items-end justify-center p-2`}
-                        >
-                          <span className="text-xs text-white font-bold">
-                            {index <= 4 ? `${Math.floor(Math.random() * 3) + 1}h` : ''}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-sm text-gray-600 mt-4 text-center">
-                    {showDemoData && (!stats?.totalHoursWatched || stats.totalHoursWatched === 0) ? (
-                      <>This is demo data. Start learning to see your real progress! 🎯</>
-                    ) : (
-                      <>You've studied for {displayStats?.totalHoursWatched.toFixed(1) || 0} hours this week! 🎯</>
-                    )}
-                  </p>
-                </div>
+
               </>
             )}
           </div>
@@ -630,82 +736,116 @@ export default function Dashboard(){
 
         {activeTab === 'videos' && (
           <div>
-            <h2 className="text-3xl font-black text-gray-900 mb-6">🔴 Live Sessions</h2>
+            <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-6">🔴 Live Sessions</h2>
 
-            {/* Google Meet Integration - Top Section */}
-            <div className="mb-8 bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-6 shadow-lg text-white">
-              <div className="flex items-start gap-4">
-                <div className="text-5xl">👥</div>
-                <div className="flex-1">
-                  <h3 className="text-2xl font-black mb-2">Join Live Video Session</h3>
-                  <p className="text-blue-100 mb-4">
-                    Connect with instructors and fellow students in real-time via Google Meet
-                  </p>
-                  <div className="flex gap-3 flex-wrap">
-                    <button
-                      onClick={() => window.open('https://meet.google.com/new', '_blank')}
-                      className="px-6 py-3 bg-white text-blue-600 font-bold rounded-lg hover:bg-blue-50 transition-all transform hover:scale-105"
-                    >
-                      👥 Create Google Meet
-                    </button>
-                    <button
-                      onClick={() => {
-                        const meetCode = prompt('Enter Google Meet code or link:')
-                        if (meetCode) {
-                          if (meetCode.includes('meet.google.com')) {
-                            window.open(meetCode, '_blank')
-                          } else {
-                            window.open(`https://meet.google.com/${meetCode}`, '_blank')
-                          }
-                        }
-                      }}
-                      className="px-6 py-3 bg-blue-700 text-white font-bold rounded-lg hover:bg-blue-800 transition-all"
-                    >
-                      🔗 Join with Code
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Always-visible Join box */}
+            <JoinMeetBox />
 
             {loading ? (
               <div className="flex justify-center items-center h-64">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
               </div>
+            ) : liveSessions.length === 0 ? (
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-12 shadow-md border border-gray-200 dark:border-gray-700 text-center mt-6">
+                <div className="text-6xl mb-4">📡</div>
+                <h3 className="text-xl font-black text-gray-800 dark:text-white mb-2">No Live Sessions Scheduled Yet</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">
+                  The admin hasn't scheduled any live sessions. Check back soon!
+                </p>
+              </div>
             ) : (
-              <div className="space-y-8">
+              <div className="space-y-4">
+                {liveSessions.map((session) => {
+                  const scheduledDate = session.scheduledAt?.toDate ? session.scheduledAt.toDate() : new Date(session.scheduledAt)
+                  const isLive = session.status === 'live'
+                  const isUpcoming = session.status === 'upcoming'
+                  const isCompleted = session.status === 'completed'
+                  return (
+                    <div
+                      key={session.id}
+                      className={`bg-white dark:bg-gray-800 rounded-xl p-6 shadow-md border-2 ${isLive ? 'border-red-400' : isUpcoming ? 'border-indigo-200' : 'border-gray-200 dark:border-gray-700'} flex flex-col md:flex-row md:items-center gap-4`}
+                    >
+                      {/* Status badge */}
+                      <div className="flex-shrink-0">
+                        {isLive && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 font-bold rounded-full text-xs animate-pulse">
+                            🔴 LIVE NOW
+                          </span>
+                        )}
+                        {isUpcoming && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 text-indigo-700 font-bold rounded-full text-xs">
+                            📅 UPCOMING
+                          </span>
+                        )}
+                        {isCompleted && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-600 font-bold rounded-full text-xs">
+                            ✅ COMPLETED
+                          </span>
+                        )}
+                      </div>
 
-                {/* Videos Watched History */}
-                <div className="bg-white rounded-xl p-6 shadow-lg border-2 border-gray-200">
-                  <h3 className="text-xl font-black text-gray-900 mb-4">✅ Recently Watched ({videosWatched.length})</h3>
-                  {videosWatched.length > 0 ? (
-                    <div className="space-y-3">
-                      {videosWatched.map(v => (
-                        <div key={v.id} className="p-4 rounded-lg bg-green-50 border-2 border-green-200 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <span className="text-2xl">✅</span>
-                            <div>
-                              <p className="font-bold text-gray-900 text-sm">{v.videoTitle || 'Video Lecture'}</p>
-                              <p className="text-xs text-gray-500">{v.duration || 'Duration unknown'} • Completed</p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => window.open('https://meet.google.com/new', '_blank')}
-                            className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all text-xs"
-                          >
-                            👥 Discuss
-                          </button>
+                      {/* Session info */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-black text-gray-900 dark:text-white leading-tight">{session.title}</h3>
+                        {session.topic && <p className="text-xs font-semibold text-indigo-500 mt-0.5 uppercase tracking-wide">{session.topic}</p>}
+                        {session.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{session.description}</p>}
+                        <div className="flex flex-wrap gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                          {session.instructor && <span>👨‍🏫 {session.instructor}</span>}
+                          <span>📅 {scheduledDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} at {scheduledDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          {session.duration && <span>⏱ {session.duration} min</span>}
+                          {session.category && <span>🏷 {session.category}</span>}
                         </div>
-                      ))}
+                      </div>
+
+                      {/* Join button */}
+                      {(isLive || isUpcoming) && (
+                        <div className="flex-shrink-0 flex flex-col gap-2 items-end">
+                          {session.meetLink ? (
+                            <button
+                              onClick={() => window.open(session.meetLink, '_blank')}
+                              className={`px-6 py-3 font-bold rounded-xl transition-all transform hover:scale-105 text-sm whitespace-nowrap ${isLive ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+                            >
+                              {isLive ? '🔴 Join Now' : '🔗 Join Live Session'}
+                            </button>
+                          ) : (
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                placeholder="Enter Meet ID or link"
+                                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const val = (e.target as HTMLInputElement).value.trim()
+                                    if (val) {
+                                      const url = val.startsWith('http') ? val : `https://meet.google.com/${val}`
+                                      window.open(url, '_blank')
+                                    }
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={(e) => {
+                                  const input = (e.currentTarget.previousSibling as HTMLInputElement)
+                                  const val = input?.value?.trim()
+                                  if (val) {
+                                    const url = val.startsWith('http') ? val : `https://meet.google.com/${val}`
+                                    window.open(url, '_blank')
+                                  }
+                                }}
+                                className={`px-4 py-2 font-bold rounded-xl transition-all text-sm whitespace-nowrap ${isLive ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+                              >
+                                {isLive ? '🔴 Join' : '🔗 Join'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {isCompleted && (
+                        <span className="flex-shrink-0 px-6 py-3 bg-gray-100 text-gray-400 font-bold rounded-xl text-sm cursor-not-allowed">Session Ended</span>
+                      )}
                     </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="text-5xl mb-3">📹</div>
-                      <p className="text-gray-500 mb-4">No videos watched yet</p>
-                      <p className="text-sm text-gray-400">Start watching lectures above to build your learning history</p>
-                    </div>
-                  )}
-                </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -725,13 +865,214 @@ export default function Dashboard(){
 
         {activeTab === 'tests' && (
           <div>
-            <FolderView
-              category="mock-tests"
-              allowedExams={enrolledCourses}
-              onStartTest={(testId, testName) => {
-                setActiveTestId(testId)
-              }}
-            />
+            {isAdmin ? (
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white">✅ Mock Test Management</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Add, edit, delete or import questions for any test.</p>
+                  </div>
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={openAddMQ}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-all shadow"
+                    >
+                      ➕ Add Question
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (allMockQuestions.length === 0) { alert('No questions to remove in this test.'); return }
+                        const list = allMockQuestions.map((q, i) => `${i + 1}. ${q.question.slice(0, 70)}`).join('\n')
+                        const num = prompt(`Enter question number to remove (1–${allMockQuestions.length}):\n\n${list}`)
+                        if (!num) return
+                        const idx = parseInt(num) - 1
+                        if (isNaN(idx) || idx < 0 || idx >= allMockQuestions.length) { alert('Invalid number.'); return }
+                        deleteMQ(allMockQuestions[idx].id)
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-all shadow"
+                    >
+                      🗑️ Remove Question
+                    </button>
+                    <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-all shadow cursor-pointer">
+                      📥 Import CSV / Excel
+                      <input type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden" onChange={handleMQImport} />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Test Selector */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow border border-gray-100 dark:border-gray-700">
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Select Mock Test</label>
+                  <select
+                    value={mqTestId}
+                    onChange={e => setMqTestId(e.target.value)}
+                    className="w-full sm:w-96 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {['UPSC › Prelims', 'UPSC › Mains', 'TNPSC › Prelims', 'TNPSC › Mains'].map(group => (
+                      <optgroup key={group} label={group}>
+                        {MOCK_TEST_OPTIONS.filter(t => t.group === group).map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-2">{allMockQuestions.length} question(s) in this test</p>
+                </div>
+
+                {/* Import error */}
+                {mqImportError && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl p-4 text-xs text-red-600 dark:text-red-400 font-bold">
+                    ⚠ {mqImportError}
+                  </div>
+                )}
+
+                {/* Questions List */}
+                {allMockQuestions.length === 0 ? (
+                  <div className="text-center py-16 text-gray-400 dark:text-gray-500">
+                    <p className="text-5xl mb-3">📝</p>
+                    <p className="font-semibold">No questions yet.</p>
+                    <p className="text-sm">Click "Add Question" or import a CSV file to get started.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {allMockQuestions.map((q, idx) => (
+                      <div key={q.id} className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow border border-gray-100 dark:border-gray-700">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 px-2 py-0.5 rounded-full">Q{idx + 1}</span>
+                              {q.category && <span className="text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 px-2 py-0.5 rounded-full">{q.category}</span>}
+                            </div>
+                            <p className="font-semibold text-gray-900 dark:text-white text-sm mb-3">{q.question}</p>
+                            <ul className="space-y-1">
+                              {q.options.map((opt, i) => (
+                                <li key={i} className={`text-xs px-3 py-1.5 rounded-lg ${i === q.correctAnswer ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-bold' : 'bg-gray-50 text-gray-600 dark:bg-gray-700/50 dark:text-gray-400'}`}>
+                                  {['A', 'B', 'C', 'D'][i]}. {opt} {i === q.correctAnswer && '✓'}
+                                </li>
+                              ))}
+                            </ul>
+                            {q.explanation && <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">💡 {q.explanation}</p>}
+                          </div>
+                          <div className="flex flex-col gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => openEditMQ(q)}
+                              className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-400 font-bold rounded-lg text-xs transition-all"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() => deleteMQ(q.id)}
+                              className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 font-bold rounded-lg text-xs transition-all"
+                            >
+                              🗑️ Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add / Edit Modal */}
+                {mqModalMode && (
+                  <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+                      <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4">
+                        {mqModalMode === 'add' ? '➕ Add New Question' : '✏️ Edit Question'}
+                      </h3>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Question <span className="text-red-500">*</span></label>
+                          <textarea
+                            rows={3}
+                            value={mqForm.question}
+                            onChange={e => setMqForm(f => ({ ...f, question: e.target.value }))}
+                            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                            placeholder="Enter question text..."
+                          />
+                        </div>
+
+                        {['A', 'B', 'C', 'D'].map((letter, i) => (
+                          <div key={i}>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                              Option {letter} <span className="text-red-500">*</span>
+                              {i === mqForm.correctAnswer && <span className="ml-2 text-green-600 text-xs">(Correct Answer)</span>}
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={mqForm.options[i]}
+                                onChange={e => {
+                                  const opts = [...mqForm.options]
+                                  opts[i] = e.target.value
+                                  setMqForm(f => ({ ...f, options: opts }))
+                                }}
+                                className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                placeholder={`Option ${letter}`}
+                              />
+                              <button
+                                onClick={() => setMqForm(f => ({ ...f, correctAnswer: i }))}
+                                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${mqForm.correctAnswer === i ? 'bg-green-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-green-100'}`}
+                              >
+                                ✓
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                          <input
+                            type="text"
+                            value={mqForm.category}
+                            onChange={e => setMqForm(f => ({ ...f, category: e.target.value }))}
+                            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="e.g. Polity, History, Economics..."
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Explanation</label>
+                          <textarea
+                            rows={2}
+                            value={mqForm.explanation}
+                            onChange={e => setMqForm(f => ({ ...f, explanation: e.target.value }))}
+                            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                            placeholder="Optional explanation for the correct answer..."
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 mt-6">
+                        <button
+                          onClick={saveMQForm}
+                          className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all"
+                        >
+                          {mqModalMode === 'add' ? '➕ Add Question' : '💾 Save Changes'}
+                        </button>
+                        <button
+                          onClick={() => setMqModalMode(null)}
+                          className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-bold rounded-xl transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <FolderView
+                category="mock-tests"
+                allowedExams={enrolledCourses}
+                onStartTest={(testId, testName) => {
+                  setActiveTestId(testId)
+                }}
+              />
+            )}
           </div>
         )}
 
@@ -867,7 +1208,99 @@ export default function Dashboard(){
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// JOIN MEET BOX — always visible in Live Sessions tab
+// ─────────────────────────────────────────────────────────────────────────────
+function JoinMeetBox() {
+  const [meetInput, setMeetInput] = React.useState('')
+
+  const handleJoin = () => {
+    const val = meetInput.trim()
+    if (!val) return
+    const url = val.startsWith('http') ? val : `https://meet.google.com/${val}`
+    window.open(url, '_blank')
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-md border-2 border-indigo-200 dark:border-indigo-700 mb-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-xl">🎥</div>
+        <div>
+          <h3 className="text-lg font-black text-gray-900 dark:text-white">Join Google Meet</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Enter a Meet link or Meeting ID to join your live class</p>
+        </div>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <input
+          type="text"
+          value={meetInput}
+          onChange={e => setMeetInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleJoin()}
+          placeholder="e.g. abc-defg-hij  or  https://meet.google.com/abc-defg-hij"
+          className="flex-1 border-2 border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-400 placeholder-gray-400"
+        />
+        <button
+          onClick={handleJoin}
+          disabled={!meetInput.trim()}
+          className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all transform hover:scale-105 text-sm whitespace-nowrap shadow-md"
+        >
+          🔗 Join Now
+        </button>
+      </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+        You can paste the full Google Meet URL or just the meeting code (e.g. <span className="font-mono">abc-defg-hij</span>)
+      </p>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MY COURSES component (shown in Overview for regular users)
+// ─────────────────────────────────────────────────────────────────────────────
+const ALL_COURSES = [
+  { id: 'tnpsc-prelims',       label: 'TNPSC Group 1 Prelims',          icon: '📋', color: 'from-emerald-500 to-teal-600' },
+  { id: 'tnpsc-prelims-mains', label: 'TNPSC Group 1 Prelims + Mains',  icon: '📖', color: 'from-teal-500 to-cyan-600' },
+  { id: 'tnpsc-mentorship',    label: 'TNPSC Personal Mentorship',       icon: '🤝', color: 'from-cyan-500 to-blue-600' },
+  { id: 'upsc-prelims',        label: 'UPSC CSE Prelims',                icon: '🏛️', color: 'from-indigo-500 to-violet-600' },
+  { id: 'upsc-prelims-mains',  label: 'UPSC CSE Prelims + Mains',        icon: '📚', color: 'from-violet-500 to-purple-600' },
+  { id: 'upsc-mentorship',     label: 'UPSC Personal Mentorship',        icon: '🎓', color: 'from-purple-500 to-pink-600' },
+]
+
+function MyCourses({ enrolledCourses, navigate }: { enrolledCourses: string[]; navigate: (path: string) => void }) {
+  return (
+    <div className="mb-8">
+      <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-1">My Courses</h2>
+
+      {enrolledCourses.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-600 p-10 text-center mb-8">
+          <div className="text-5xl mb-3">📂</div>
+          <p className="font-bold text-gray-700 dark:text-gray-300 mb-1">No courses enrolled yet</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Once you pay for a course, it will appear here.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {ALL_COURSES.filter(c => enrolledCourses.includes(c.id)).map(course => (
+            <button
+              key={course.id}
+              onClick={() => navigate(`/course/${course.id}`)}
+              className={`bg-gradient-to-br ${course.color} text-white rounded-2xl p-6 text-left shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 active:scale-[0.98]`}
+            >
+              <div className="text-3xl mb-3">{course.icon}</div>
+              <p className="font-black text-base leading-snug">{course.label}</p>
+              <p className="text-white/70 text-xs mt-2 flex items-center gap-1">
+                Open course →
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sample questions for mock tests
+// ─────────────────────────────────────────────────────────────────────────────
 function getSampleQuestions(testId: string) {
   const baseQuestions = [
     {

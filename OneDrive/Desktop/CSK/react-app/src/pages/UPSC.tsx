@@ -8,7 +8,14 @@ export default function UPSC(){
   const { user, enrolledCourses, loading } = useAuth()
 
   // Instant check — no Firestore call needed
-  const hasAccess = !user || enrolledCourses.length === 0 || enrolledCourses.includes('UPSC') || enrolledCourses.includes('BOTH')
+  // User can see UPSC page if they have no enrollment yet (browsing), or have any UPSC-related course
+  const hasUPSCCourse = enrolledCourses.some(c =>
+    c === 'UPSC' || c === 'BOTH' || c.startsWith('upsc-')
+  )
+  const hasTNPSCOnlyCourse = enrolledCourses.length > 0 && enrolledCourses.every(c =>
+    c === 'TNPSC' || c.startsWith('tnpsc-')
+  )
+  const hasAccess = !user || enrolledCourses.length === 0 || hasUPSCCourse || !hasTNPSCOnlyCourse
 
   if (loading) {
     return (
@@ -74,29 +81,31 @@ export default function UPSC(){
       title: "UPSC Prelims Focused",
       desc: "Master the fundamentals and clear the CSAT + GS hurdle with comprehensive concept coverage and PYQ analysis.",
       price: "₹7,999",
+      courseId: "upsc-prelims",
       features: ["250+ HD Concept Videos: Complete GS (Static + Dynamic) & CSAT coverage", "PYQ Trend Analysis: Deep-dive into UPSC's evolving question patterns and logic", "Teaching in Tamil | Standard English study materials", "Pre-Session PDFs: Daily high-yield notes provided before every lecture", "Current Affairs Plus: Integration of The Hindu, IE, and PIB for UPSC standards", "Prelims Test Series: Standard-quality mocks with detailed performance analytics"]
     },
     {
-      title: "Integrated Prelims + Mains",
+      title: "UPSC Prelims + Mains",
       desc: "A holistic approach for the serious civil service aspirant with comprehensive coverage of all GS papers and essay.",
       price: "₹12,999",
+      courseId: "upsc-prelims-mains",
       features: ["500+ Analytical Videos: Comprehensive coverage of GS Papers I-IV and Essay", "Thematic PYQ Mapping: Topic-wise analysis of the last 10 years of UPSC Mains", "Teaching in Tamil | Standard English materials", "Mains Answer Lab: Periodic answer writing practice with expert evaluation", "Daily Prep Support: Subject-wise PDFs delivered daily to keep you ahead", "Integrated Test Series: Combined Prelims Mocks + Mains Answer Evaluation"]
     },
     {
-      title: "1-on-1 Executive Coaching",
+      title: "1-on-1 Coaching",
       desc: "Premium, on-demand mentorship for busy professionals with personalized guidance and flexible scheduling.",
       price: "₹19,999",
+      courseId: "upsc-mentorship",
       features: ["Private Live Sessions: Daily 1-on-1 coaching scheduled at your convenience", "Executive Flexibility: A dynamic study plan that adapts to your work-life shifts", "Zero-Doubt Guarantee: We explain complex UPSC concepts until they are 100% clear", "Personalized PYQ Strategy: Target high-weightage topics to maximize limited study time", "Instant Feedback: Real-time correction of your Answer Writing and Logic", "Efficiency First: A No-Waste roadmap focused purely on clearing the cutoff"]
     }
   ]
 
   const highlights = [
-    { emoji: '📚', title: 'Comprehensive Coverage', desc: 'All UPSC subjects covered with depth and clarity' },
-    { emoji: '👨‍🏫', title: 'Expert Faculty', desc: 'Learn from IAS officers and subject matter experts' },
-    { emoji: '📈', title: '95% Success Rate', desc: 'Our students consistently rank in top 500' },
-    { emoji: '🤝', title: 'Community Support', desc: 'Learn and grow with 10000+ aspirants' },
-    { emoji: '📱', title: 'Mobile Learning', desc: 'Access all content on the go, lifetime downloads' },
-    { emoji: '🎯', title: 'Career Guidance', desc: 'Personalized guidance for your UPSC journey' }
+    { emoji: '👨‍🏫', title: 'Expert Faculty', desc: 'Learn from Subject Matter experts and experienced Tutors.' },
+    { emoji: '🤝', title: 'Community Support', desc: 'Learn and grow with 500+ Aspirants.' },
+    { emoji: '📱', title: 'Classroom in Your Pocket', desc: 'Access HD video lectures, interactive PDFs, and instant doubt-clearing features on the move.' },
+    { emoji: '📚', title: 'High-Quality Resources', desc: 'Concise, high-yield notes.' },
+    { emoji: '🎯', title: 'Modern Pedagogy', desc: 'Strictly aligned with the latest trends and evolving question patterns.' }
   ]
 
   return (
@@ -120,18 +129,31 @@ export default function UPSC(){
           <div className="absolute -bottom-8 right-20 w-72 h-72 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl"></div>
         </div>
         
-        <div className="relative max-w-5xl mx-auto px-6 text-white">
-          <h1 className="text-5xl md:text-6xl font-black leading-tight">UPSC CSE Mastery</h1>
-          <p className="mt-4 text-xl md:text-2xl text-indigo-100 leading-relaxed max-w-2xl">
-            Complete preparation for Union Public Service Commission. Study with India's top educators and join thousands of successful aspirants.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-4">
-            <button 
-              onClick={() => navigate('/contact')}
-              className="px-8 py-4 bg-white/20 backdrop-blur-md text-white font-bold text-lg rounded-lg border-2 border-white hover:bg-white/30 transition-all duration-300"
-            >
-              Schedule Demo
-            </button>
+        <div className="relative max-w-5xl mx-auto px-6 flex flex-col md:flex-row items-center gap-10 text-white">
+          {/* Left: Text */}
+          <div className="flex-1">
+            <h1 className="text-4xl md:text-5xl font-black leading-tight whitespace-nowrap">UPSC CSE Mastery</h1>
+            <p className="mt-4 text-xl md:text-2xl text-indigo-100 leading-relaxed max-w-2xl">
+              Complete preparation for Union Public Service Commission. Study with India's top educators and join thousands of successful aspirants.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-4">
+              <button
+                onClick={() => navigate('/contact')}
+                className="px-8 py-4 bg-white/20 backdrop-blur-md text-white font-bold text-lg rounded-lg border-2 border-white hover:bg-white/30 transition-all duration-300"
+              >
+                Schedule Demo
+              </button>
+            </div>
+          </div>
+
+          {/* Right: UPSC Image */}
+          <div className="flex-shrink-0 w-80 md:w-[28rem] flex items-center justify-end pr-2">
+            <img
+              src="/images/WhatsApp Image 2026-03-11 at 2.53.04 PM.jpeg"
+              alt="UPSC CSE Mastery"
+              className="w-full rounded-2xl shadow-2xl border-2 border-white/30 object-contain"
+              style={{ maxHeight: '400px' }}
+            />
           </div>
         </div>
       </div>
@@ -140,13 +162,13 @@ export default function UPSC(){
 
       {/* Highlights Section */}
       <div className="max-w-6xl mx-auto px-6 py-12">
-        <h2 className="text-4xl md:text-4xl font-black text-gray-900 text-center mb-12">Why Choose CSK for UPSC?</h2>
+        <h2 className="text-4xl md:text-4xl font-black text-gray-900 dark:text-white text-center mb-12">Why Choose CSK for UPSC?</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {highlights.map((item, idx) => (
-            <div key={idx} className="bg-white rounded-xl border-2 border-gray-200 p-8 hover:shadow-lg hover:border-indigo-300 transition-all">
+            <div key={idx} className="bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 p-8 hover:shadow-lg hover:border-indigo-300 transition-all">
               <div className="text-5xl mb-3">{item.emoji}</div>
-              <h3 className="text-xl font-black text-gray-900">{item.title}</h3>
-              <p className="mt-2 text-gray-700 leading-relaxed">{item.desc}</p>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white">{item.title}</h3>
+              <p className="mt-2 text-gray-700 dark:text-gray-300 leading-relaxed">{item.desc}</p>
             </div>
           ))}
         </div>
@@ -154,7 +176,7 @@ export default function UPSC(){
 
       {/* Programs Section */}
       <div className="max-w-6xl mx-auto px-6 py-12">
-        <h2 className="text-4xl md:text-4xl font-black text-gray-900 text-center mb-12">Our Programs</h2>
+        <h2 className="text-4xl md:text-4xl font-black text-gray-900 dark:text-white text-center mb-12">Our Programs</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {programs.map((prog, idx) => (
             <CourseCard 
@@ -164,6 +186,7 @@ export default function UPSC(){
               price={prog.price}
               theme="upsc"
               features={prog.features}
+              courseId={prog.courseId}
             />
           ))}
         </div>
@@ -175,12 +198,6 @@ export default function UPSC(){
           <h2 className="text-4xl md:text-5xl font-black">Ready to Start Your UPSC Journey?</h2>
           <p className="mt-4 text-lg text-indigo-100">Get personalized guidance and join thousands of successful aspirants</p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <button 
-              onClick={() => navigate('/login')}
-              className="px-8 py-4 bg-yellow-400 text-indigo-900 font-black text-lg rounded-lg hover:bg-yellow-300 transition-all duration-300 transform hover:scale-105 shadow-lg"
-            >
-              Start Free Trial
-            </button>
             <Link to="/contact" className="px-8 py-4 bg-white/20 backdrop-blur-md text-white font-bold text-lg rounded-lg border-2 border-white hover:bg-white/30 transition-all duration-300 inline-block">
               Contact Us
             </Link>

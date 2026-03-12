@@ -188,7 +188,7 @@ export default function FolderView({
         {/* Level Folder (Prelims / Mains) */}
         <div
           onClick={() => toggleFolder(levelId)}
-          className="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer transition-all"
+          className="flex items-center gap-3 p-3 bg-white dark:bg-gray-700 rounded-lg border-2 border-gray-300 dark:border-gray-600 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900 cursor-pointer transition-all"
         >
           <input
             type="checkbox"
@@ -198,8 +198,8 @@ export default function FolderView({
             className="w-5 h-5 cursor-pointer"
           />
           <span className="text-2xl">{isLevelExpanded ? '📂' : '📁'}</span>
-          <span className="font-bold text-gray-700 flex-1">{level}</span>
-          <span className="text-sm text-gray-500">{subjects.length} subjects</span>
+          <span className="font-bold text-gray-700 dark:text-gray-200 flex-1">{level}</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{subjects.length} subjects</span>
           <span className="text-gray-400 text-sm">{isLevelExpanded ? '▲' : '▼'}</span>
         </div>
 
@@ -214,7 +214,7 @@ export default function FolderView({
                   {/* Subject Folder Row */}
                   <div
                     onClick={() => toggleFolder(subjectId)}
-                    className="flex items-center gap-3 p-2 bg-indigo-50 rounded-lg border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100 transition-all cursor-pointer"
+                    className="flex items-center gap-3 p-2 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg border border-indigo-200 dark:border-indigo-700 hover:border-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-all cursor-pointer"
                   >
                     <input
                       type="checkbox"
@@ -224,8 +224,8 @@ export default function FolderView({
                       className="w-4 h-4 cursor-pointer"
                     />
                     <span className="text-lg">{isSubjectExpanded ? '📂' : '📁'}</span>
-                    <span className="text-gray-700 font-semibold flex-1">{subject}</span>
-                    <span className="text-xs text-indigo-500 font-medium hidden sm:inline">
+                    <span className="text-gray-700 dark:text-gray-200 font-semibold flex-1">{subject}</span>
+                    <span className="text-xs text-indigo-500 dark:text-indigo-400 font-medium hidden sm:inline">
                       {exam} › {level}
                     </span>
                     {/* Upload button visible directly on folder row for admins */}
@@ -247,7 +247,7 @@ export default function FolderView({
                   {/* Inside Subject Folder — file list */}
                   {isSubjectExpanded && (
                     <div className="ml-6 mt-1 mb-2 border-l-2 border-indigo-200 pl-4 space-y-1">
-                      <div className="flex items-center gap-2 p-2 bg-white rounded border border-dashed border-indigo-300 text-sm text-gray-500">
+                      <div className="flex items-center gap-2 p-2 bg-white dark:bg-gray-700 rounded border border-dashed border-indigo-300 dark:border-indigo-600 text-sm text-gray-500 dark:text-gray-400">
                         <span>📄</span>
                         <span className="flex-1 italic">No files uploaded yet</span>
                       </div>
@@ -271,7 +271,7 @@ export default function FolderView({
         {/* Test Type Folder */}
         <div
           onClick={() => toggleFolder(testTypeId)}
-          className="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer transition-all"
+          className="flex items-center gap-3 p-3 bg-white dark:bg-gray-700 rounded-lg border-2 border-gray-300 dark:border-gray-600 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900 cursor-pointer transition-all"
         >
           <input
             type="checkbox"
@@ -281,19 +281,19 @@ export default function FolderView({
             className="w-5 h-5 cursor-pointer"
           />
           <span className="text-2xl">{isExpanded ? '📂' : '📁'}</span>
-          <span className="font-bold text-gray-700 flex-1">{testType}</span>
-          <span className="text-sm text-gray-500">{tests.length} tests</span>
+          <span className="font-bold text-gray-700 dark:text-gray-200 flex-1">{testType}</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{tests.length} tests</span>
         </div>
 
         {/* Tests List */}
         {isExpanded && (
-          <div className="mt-2 ml-6 space-y-2 border-l-2 border-indigo-300 pl-4">
+          <div className="mt-2 ml-6 space-y-2 border-l-2 border-indigo-300 dark:border-indigo-700 pl-4">
             {tests.map((test, idx) => {
               const testId = `${testTypeId}-${idx}`
               return (
                 <div
                   key={testId}
-                  className="flex items-center gap-3 p-2 bg-indigo-50 rounded-lg border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100 transition-all cursor-pointer"
+                  className="flex items-center gap-3 p-2 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg border border-indigo-200 dark:border-indigo-700 hover:border-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-all cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -302,7 +302,7 @@ export default function FolderView({
                     className="w-4 h-4 cursor-pointer"
                   />
                   <span className="text-lg">📝</span>
-                  <span className="text-gray-700 font-medium flex-1">{test}</span>
+                  <span className="text-gray-700 dark:text-gray-200 font-medium flex-1">{test}</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -328,19 +328,18 @@ export default function FolderView({
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
+      <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-3xl">{categoryInfo?.icon}</span>
           <div>
-            <h2 className="text-2xl font-black text-gray-900">{categoryInfo?.name}</h2>
-            <p className="text-sm text-gray-600">{categoryInfo?.description}</p>
+            <h2 className="text-2xl font-black text-gray-900 dark:text-white">{categoryInfo?.name}</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{categoryInfo?.description}</p>
           </div>
         </div>
 
         {/* Exam Selector */}
         <div className="flex gap-3 flex-wrap">
           {(['UPSC', 'TNPSC'] as ExamType[]).map(exam => {
-            // If allowedExams is non-empty, check if this exam is allowed
             const hasAccess = allowedExams.length === 0 || allowedExams.includes(exam) || allowedExams.includes('BOTH')
             return (
               <button
@@ -359,8 +358,8 @@ export default function FolderView({
                   selectedExam === exam && hasAccess
                     ? 'bg-indigo-600 text-white shadow-lg'
                     : hasAccess
-                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-60'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed opacity-60'
                 }`}
               >
                 {!hasAccess && <span>🔒</span>}
@@ -375,17 +374,14 @@ export default function FolderView({
       <div className="space-y-4">
         {category === 'mock-tests' ? (
           <>
-            {/* Full Length Mock Test Section */}
-            <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <span>📝</span> Full Length Mock Test
               </h3>
               {renderMockTests(selectedExam, 'Full Length Mock Test', `${selectedExam}-full-length`)}
             </div>
-
-            {/* Subject Specific Mock Test Section */}
-            <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <span>📊</span> Subject Specific Mock Test
               </h3>
               {renderMockTests(selectedExam, 'Subject Specific Mock Test', `${selectedExam}-subject-specific`)}
@@ -393,17 +389,14 @@ export default function FolderView({
           </>
         ) : (
           <>
-            {/* Prelims Section */}
-            <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <span>📚</span> Prelims
               </h3>
               {renderSubjects(selectedExam, 'Prelims', `${selectedExam}-prelims`)}
             </div>
-
-            {/* Mains Section */}
-            <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <span>📖</span> Mains
               </h3>
               {renderSubjects(selectedExam, 'Mains', `${selectedExam}-mains`)}
@@ -413,8 +406,8 @@ export default function FolderView({
       </div>
 
       <div className="mt-6 flex items-center justify-between gap-3 text-sm">
-        <span className="text-gray-600">Selected: {selectedCount}</span>
-        {actionMessage && <span className="text-indigo-700 font-medium">{actionMessage}</span>}
+        <span className="text-gray-600 dark:text-gray-400">Selected: {selectedCount}</span>
+        {actionMessage && <span className="text-indigo-700 dark:text-indigo-400 font-medium">{actionMessage}</span>}
       </div>
 
       {/* Action Buttons */}

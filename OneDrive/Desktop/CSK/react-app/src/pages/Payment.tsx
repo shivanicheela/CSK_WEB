@@ -8,10 +8,12 @@ export default function Payment() {
   const location = useLocation()
   const { user } = useAuth()
 
-  const state = location.state as { title?: string; price?: string; courseType?: string } | null
+  const state = location.state as { title?: string; price?: string; courseType?: string; courseId?: string } | null
   const title = state?.title || 'CSK Course'
   const price = state?.price || '₹7,999'
-  const courseType = state?.courseType || 'UPSC'
+  const courseId = state?.courseId || state?.courseType || 'upsc-prelims'
+  // Derive a readable program label from courseId
+  const programLabel = courseId.startsWith('tnpsc') ? 'TNPSC' : 'UPSC'
 
   const [method, setMethod] = useState<'upi' | 'netbanking' | 'card' | null>(null)
   const [upiId, setUpiId] = useState('')
@@ -27,11 +29,11 @@ export default function Payment() {
     try {
       // Simulate payment gateway processing
       await new Promise(r => setTimeout(r, 2000))
-      // ✅ Actually enroll the user in Firestore
+      // ✅ Actually enroll the user in Firestore with specific course ID
       await enrollUserInCourse(
         user.uid,
         user.email || '',
-        courseType as 'UPSC' | 'TNPSC' | 'BOTH'
+        courseId
       )
       setPaid(true)
     } catch (err: any) {
@@ -44,8 +46,8 @@ export default function Payment() {
 
   if (paid) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-md w-full text-center">
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-900 flex items-center justify-center p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-12 max-w-md w-full text-center">
           <div className="text-7xl mb-6">🎉</div>
           <h2 className="text-3xl font-black text-gray-900 mb-2">Payment Successful!</h2>
           <p className="text-gray-600 mb-2">You are now enrolled in</p>
@@ -66,29 +68,29 @@ export default function Payment() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-900">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-6 py-3 flex items-center">
-          <button onClick={() => navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg font-semibold">
+          <button onClick={() => navigate(-1)} className="flex items-center gap-2 px-4 py-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded-lg font-semibold">
             ← Back
           </button>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-6 py-10">
-        <h1 className="text-3xl font-black text-gray-900 mb-2">Complete Your Enrollment</h1>
-        <p className="text-gray-500 mb-8">Secure payment powered by CSK</p>
+        <h1 className="text-3xl font-black text-gray-900 dark:text-white mb-2">Complete Your Enrollment</h1>
+        <p className="text-gray-500 dark:text-gray-400 mb-8">Secure payment powered by CSK</p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 
           {/* Order Summary */}
           <div className="md:col-span-1">
-            <div className="bg-white rounded-2xl border-2 border-gray-200 p-6 shadow-sm sticky top-24">
-              <h3 className="text-lg font-black text-gray-900 mb-4">Order Summary</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border-2 border-gray-200 dark:border-gray-700 p-6 shadow-sm sticky top-24">
+              <h3 className="text-lg font-black text-gray-900 dark:text-white mb-4">Order Summary</h3>
               <div className="bg-indigo-50 rounded-xl p-4 mb-4">
                 <p className="font-bold text-indigo-900">{title}</p>
-                <p className="text-sm text-indigo-600 mt-1">{courseType} Program</p>
+                <p className="text-sm text-indigo-600 mt-1">{programLabel} Program</p>
               </div>
               <div className="space-y-2 text-sm text-gray-600 border-t pt-4">
                 <div className="flex justify-between">

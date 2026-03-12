@@ -872,24 +872,19 @@ export const removeAdminRole = async (userId: string) => {
 export const enrollUserInCourse = async (
   userId: string,
   email: string,
-  courseType: 'UPSC' | 'TNPSC' | 'BOTH'
+  courseId: string
 ): Promise<void> => {
   try {
     const enrollmentRef = doc(db, 'enrollments', userId);
     const enrollmentSnap = await getDoc(enrollmentRef);
 
     if (enrollmentSnap.exists()) {
-      // Update existing enrollment
+      // Update existing enrollment — add courseId if not already present
       const currentData = enrollmentSnap.data() as UserEnrollment;
-      const enrolledCourses = currentData.enrolledCourses || [];
+      const enrolledCourses: string[] = currentData.enrolledCourses || [];
 
-      if (courseType === 'BOTH') {
-        await updateDoc(enrollmentRef, {
-          enrolledCourses: ['UPSC', 'TNPSC'],
-          updatedAt: new Date()
-        });
-      } else if (!enrolledCourses.includes(courseType)) {
-        enrolledCourses.push(courseType);
+      if (!enrolledCourses.includes(courseId)) {
+        enrolledCourses.push(courseId);
         await updateDoc(enrollmentRef, {
           enrolledCourses,
           updatedAt: new Date()
@@ -900,13 +895,13 @@ export const enrollUserInCourse = async (
       await setDoc(enrollmentRef, {
         userId,
         email,
-        enrolledCourses: courseType === 'BOTH' ? ['UPSC', 'TNPSC'] : [courseType],
+        enrolledCourses: [courseId],
         paymentStatus: 'paid',
         enrolledAt: new Date(),
-        expiresAt: null // Set to null for lifetime access, or add expiry date
+        expiresAt: null
       });
     }
-    console.log(`✅ User enrolled in ${courseType}`);
+    console.log(`✅ User enrolled in ${courseId}`);
   } catch (error: any) {
     console.error('❌ Error enrolling user:', error.message);
     throw error;
@@ -942,11 +937,14 @@ export const getUserEnrolledCourses = async (userId: string): Promise<string[]> 
  */
 export const hasUserAccessToCourse = async (
   userId: string,
-  courseType: 'UPSC' | 'TNPSC'
+  courseType: string
 ): Promise<boolean> => {
   try {
     const enrolledCourses = await getUserEnrolledCourses(userId);
-    return enrolledCourses.includes(courseType);
+    // Support both exact match (new specific IDs) and prefix match
+    return enrolledCourses.some(c =>
+      c === courseType || c.toLowerCase().startsWith(courseType.toLowerCase())
+    );
   } catch (error: any) {
     console.error('❌ Error checking course access:', error.message);
     return false;
@@ -954,16 +952,84 @@ export const hasUserAccessToCourse = async (
 };
 
 /**
- * Remove user enrollment
+ * Remove user enrollment (specific course, or entire record)
  * @param userId - Firebase user ID
+ * @param courseId - optional specific course ID to remove; omit to delete entire enrollment
  */
-export const removeUserEnrollment = async (userId: string): Promise<void> => {
+export const removeUserEnrollment = async (userId: string, courseId?: string): Promise<void> => {
   try {
     const enrollmentRef = doc(db, 'enrollments', userId);
-    await deleteDoc(enrollmentRef);
+    if (courseId) {
+      // Remove only this specific course from the array
+      const snap = await getDoc(enrollmentRef);
+      if (snap.exists()) {
+        const data = snap.data() as UserEnrollment;
+        const updated = (data.enrolledCourses || []).filter((c: string) => c !== courseId);
+        await updateDoc(enrollmentRef, { enrolledCourses: updated, updatedAt: new Date() });
+      }
+    } else {
+      await deleteDoc(enrollmentRef);
+    }
     console.log('✅ User enrollment removed');
   } catch (error: any) {
     console.error('❌ Error removing enrollment:', error.message);
     throw error;
   }
 };
+
+// ============================================
+// LIVE SESSIONS
+// ============================================
+
+export interface FirestoreLiveSession extends DocumentData {
+  id?: string;
+  title: string;
+  topic?: string;
+  instructor?: string;
+  description?: string;
+  scheduledAt: any;
+  duration?: number;
+  meetLink: string;
+  status: 'upcoming' | 'live' | 'completed';
+  category?: string;
+  createdAt?: any;
+}
+
+export const getLiveSessions = async (): Promise<FirestoreLiveSession[]> => {
+  try {
+    const ref = collection(db, 'liveSessions');
+    const q = query(ref, orderBy('scheduledAt', 'asc'));
+    const snapshot = await getDocs(q);
+    const sessions: FirestoreLiveSession[] = [];
+    snapshot.forEach((d) => {
+      sessions.push({ id: d.id, ...d.data() } as FirestoreLiveSession);
+    });
+    return sessions;
+  } catch (error: any) {
+    console.error('❌ Error fetching live sessions:', error.message);
+    return [];
+  }
+};
+
+export const addLiveSession = async (session: Omit<FirestoreLiveSession, 'id'>): Promise<string> => {
+  try {
+    const ref = collection(db, 'liveSessions');
+    const docRef = await addDoc(ref, { ...session, createdAt: new Date() });
+    console.log('✅ Live session added:', docRef.id);
+    return docRef.id;
+  } catch (error: any) {
+    console.error('❌ Error adding live session:', error.message);
+    throw error;
+  }
+};
+
+export const deleteLiveSession = async (sessionId: string): Promise<void> => {
+  try {
+    await deleteDoc(doc(db, 'liveSessions', sessionId));
+    console.log('✅ Live session deleted');
+  } catch (error: any) {
+    console.error('❌ Error deleting live session:', error.message);
+    throw error;
+  }
+};
+

@@ -8,7 +8,14 @@ export default function TNPSC(){
   const { user, enrolledCourses, loading } = useAuth()
 
   // Instant check — no Firestore call needed
-  const hasAccess = !user || enrolledCourses.length === 0 || enrolledCourses.includes('TNPSC') || enrolledCourses.includes('BOTH')
+  // User can see TNPSC page if they have no enrollment yet (browsing), or have any TNPSC-related course
+  const hasTNPSCCourse = enrolledCourses.some(c =>
+    c === 'TNPSC' || c === 'BOTH' || c.startsWith('tnpsc-')
+  )
+  const hasUPSCOnlyCourse = enrolledCourses.length > 0 && enrolledCourses.every(c =>
+    c === 'UPSC' || c.startsWith('upsc-')
+  )
+  const hasAccess = !user || enrolledCourses.length === 0 || hasTNPSCCourse || !hasUPSCOnlyCourse
 
   if (loading) {
     return (
@@ -74,29 +81,30 @@ export default function TNPSC(){
       title: "Prelims Oriented",
       desc: "Build your foundation for the first hurdle with comprehensive syllabus coverage and previous year question focus.",
       price: "₹5,999",
+      courseId: "tnpsc-prelims",
       features: ["180+ HD Video Lessons (Syllabus-wise)", "PYQ Focused: In-depth analysis of Previous Year Questions", "Teaching in Tamil | Materials in English", "Daily PDF Support: Notes provided before every session", "TN Special: State-focused Current Affairs & Schemes", "Test Series: Standard Prelims Mock Tests"]
     },
     {
-      title: "Prelims + Mains",
+      title: "TNPSC Prelims + Mains",
       desc: "Comprehensive coaching for the complete journey covering both prelims and mains with integrated preparation strategy.",
       price: "₹9,999",
+      courseId: "tnpsc-prelims-mains",
       features: ["350+ In-depth Videos (Prelims & Mains)", "PYQ Focused: Topic-wise Previous Year Question mapping", "Teaching in Tamil | Materials in English", "Daily PDF Support: Pre-session study notes", "Writing Practice: Mains Answer Evaluation & Feedback", "Test Series: Integrated Prelims + Mains Mock Exams"]
     },
     {
       title: "One-to-One Coaching",
       desc: "Your own private tutor for personalized success with daily live sessions and real-time feedback tailored to your pace.",
       price: "₹14,999",
+      courseId: "tnpsc-mentorship",
       features: ["Personalized Live Classes: Daily 1-on-1 sessions", "PYQ Strategy: Personalized drill on high-weightage topics", "Custom Study Plan: Tailored to your pace & schedule (For working professionals)", "Real-time Feedback: Instant answer writing correction", "Zero-Doubt Guarantee: We stay on a topic and re-explain until your doubt is 100% resolved"]
     }
   ]
 
   const highlights = [
-    { emoji: '🏛️', title: 'State-Specific Content', desc: 'Tailored syllabus for Tamil Nadu examinations' },
-    { emoji: '🗣️', title: 'Tamil & English Media', desc: 'Learn in your preferred language with equal quality' },
-    { emoji: '🎯', title: '92% Success Rate', desc: 'Highest selection rate among Tamil Nadu exam takers' },
-    { emoji: '💡', title: 'Local Current Affairs', desc: 'Deep focus on TN politics, history, and geography' },
-    { emoji: '👥', title: '5000+ Selections', desc: 'Join thousands of successful TNPSC candidates' },
-    { emoji: '📊', title: 'Smart Analytics', desc: 'Track your progress with detailed performance metrics' }
+    { emoji: '🎯', title: 'Result-oriented Strategy', desc: 'We ensure your minimum efforts get the maximum results.' },
+    { emoji: '👥', title: 'Limited Batch Size', desc: 'Ensure every student gets individual attention from faculty.' },
+    { emoji: '🏛️', title: 'Tailored Coaching for TNPSC Group 1 Exam', desc: 'Content specifically designed for the TNPSC Group 1 syllabus and exam pattern.' },
+    { emoji: '🗣️', title: 'Bilingual Approach', desc: 'Concepts explained in Tamil to ensure 100% understanding.' }
   ]
 
   return (
@@ -120,18 +128,31 @@ export default function TNPSC(){
           <div className="absolute -bottom-8 right-20 w-72 h-72 bg-green-200 rounded-full mix-blend-multiply filter blur-3xl"></div>
         </div>
         
-        <div className="relative max-w-5xl mx-auto px-6 text-white">
-          <h1 className="text-5xl md:text-6xl font-black leading-tight">TNPSC Excellence</h1>
-          <p className="mt-4 text-xl md:text-2xl text-emerald-100 leading-relaxed max-w-2xl">
-            Dominate Tamil Nadu Public Service Commission exams. Specially designed for state-specific requirements and highest selection rates.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-4">
-            <button 
-              onClick={() => navigate('/contact')}
-              className="px-8 py-4 bg-white/20 backdrop-blur-md text-white font-bold text-lg rounded-lg border-2 border-white hover:bg-white/30 transition-all duration-300"
-            >
-              Free Demo Class
-            </button>
+        <div className="relative max-w-5xl mx-auto px-6 flex flex-col md:flex-row items-center gap-10 text-white">
+          {/* Left: Text */}
+          <div className="flex-1">
+            <h1 className="text-4xl md:text-5xl font-black leading-tight whitespace-nowrap">TNPSC Group 1 Excellence</h1>
+            <p className="mt-4 text-xl md:text-2xl text-emerald-100 leading-relaxed max-w-2xl">
+              Dominate Tamil Nadu Public Service Commission exams. Specially designed for state-specific requirements and highest selection rates.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-4">
+              <button
+                onClick={() => navigate('/contact')}
+                className="px-8 py-4 bg-white/20 backdrop-blur-md text-white font-bold text-lg rounded-lg border-2 border-white hover:bg-white/30 transition-all duration-300"
+              >
+                Free Demo Class
+              </button>
+            </div>
+          </div>
+
+          {/* Right: TNPSC Image */}
+          <div className="flex-shrink-0 w-80 md:w-[28rem] flex items-center justify-end pr-2">
+            <img
+              src="/images/WhatsApp Image 2026-03-11 at 2.52.50 PM.jpeg"
+              alt="TNPSC Group 1 Excellence"
+              className="w-full rounded-2xl shadow-2xl border-2 border-white/30 object-contain"
+              style={{ maxHeight: '400px' }}
+            />
           </div>
         </div>
       </div>
@@ -140,13 +161,13 @@ export default function TNPSC(){
 
       {/* Highlights Section */}
       <div className="max-w-6xl mx-auto px-6 py-12">
-        <h2 className="text-4xl md:text-4xl font-black text-gray-900 text-center mb-12">Why Choose CSK for TNPSC?</h2>
+        <h2 className="text-4xl md:text-4xl font-black text-gray-900 dark:text-white text-center mb-12">Why Choose CSK for TNPSC?</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {highlights.map((item, idx) => (
-            <div key={idx} className="bg-white rounded-xl border-2 border-gray-200 p-8 hover:shadow-lg hover:border-emerald-300 transition-all">
+            <div key={idx} className="bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 p-8 hover:shadow-lg hover:border-emerald-300 transition-all">
               <div className="text-5xl mb-3">{item.emoji}</div>
-              <h3 className="text-xl font-black text-gray-900">{item.title}</h3>
-              <p className="mt-2 text-gray-700 leading-relaxed">{item.desc}</p>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white">{item.title}</h3>
+              <p className="mt-2 text-gray-700 dark:text-gray-300 leading-relaxed">{item.desc}</p>
             </div>
           ))}
         </div>
@@ -154,7 +175,7 @@ export default function TNPSC(){
 
       {/* Programs Section */}
       <div className="max-w-6xl mx-auto px-6 py-12">
-        <h2 className="text-4xl md:text-4xl font-black text-gray-900 text-center mb-12">Our Programs</h2>
+        <h2 className="text-4xl md:text-4xl font-black text-gray-900 dark:text-white text-center mb-12">Our Programs</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {programs.map((prog, idx) => (
             <CourseCard 
@@ -164,6 +185,7 @@ export default function TNPSC(){
               price={prog.price}
               theme="tnpsc"
               features={prog.features}
+              courseId={prog.courseId}
             />
           ))}
         </div>
@@ -175,12 +197,6 @@ export default function TNPSC(){
           <h2 className="text-4xl md:text-5xl font-black">Ace Your TNPSC Exam Today</h2>
           <p className="mt-4 text-lg text-emerald-100">Get expert guidance tailored for Tamil Nadu's unique requirements</p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <button 
-              onClick={() => navigate('/login')}
-              className="px-8 py-4 bg-yellow-400 text-emerald-900 font-black text-lg rounded-lg hover:bg-yellow-300 transition-all duration-300 transform hover:scale-105 shadow-lg"
-            >
-              Join Today
-            </button>
             <Link to="/contact" className="px-8 py-4 bg-white/20 backdrop-blur-md text-white font-bold text-lg rounded-lg border-2 border-white hover:bg-white/30 transition-all duration-300 inline-block">
               Talk to Expert
             </Link>

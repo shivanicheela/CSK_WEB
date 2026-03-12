@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { uploadVideo, uploadPDF, uploadThumbnail, validateFile } from '../firebase/storage.ts';
 import { addCourse } from '../firebase/firestore.ts';
 import { FOLDER_STRUCTURE } from '../utils/folderStructure.ts';
 
 export default function AdminCourseUpload() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -142,6 +144,14 @@ export default function AdminCourseUpload() {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-2xl mx-auto px-4">
+        {/* Back Button */}
+        <button
+          onClick={() => navigate('/admin')}
+          className="mb-6 flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-semibold transition"
+        >
+          ← Back to Admin
+        </button>
+
         <div className="bg-white rounded-xl shadow-lg p-8">
           <h1 className="text-3xl font-black text-gray-900 mb-8">📚 Add New Course</h1>
 

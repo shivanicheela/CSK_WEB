@@ -138,10 +138,10 @@ export default function VideoUpload() {
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/admin')}
             className="flex items-center gap-2 px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all font-semibold mb-4"
           >
-            ← Back to Dashboard
+            ← Back to Admin
           </button>
           <h1 className="text-4xl font-black text-gray-900">📹 Video Management</h1>
           <p className="text-gray-600 mt-2">Upload and manage your lecture videos — select multiple files at once</p>
